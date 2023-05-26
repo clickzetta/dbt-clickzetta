@@ -1,0 +1,17 @@
+fixed:
+  type: clickzetta
+prompts:
+  base_url:
+    hint: 'https://clickzetta.com'
+  workspace:
+    hint: 'dev workspace'
+  instance_name:
+    hint: 'dev instance name'
+  vc_name:
+    hint: 'vc name'
+  user_name:
+    hint: 'user name'
+  schema:
+    hint: 'default schema'
+  password:
+    hint: 'password'

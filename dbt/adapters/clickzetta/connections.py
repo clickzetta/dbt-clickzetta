@@ -1,0 +1,237 @@
+import base64
+import datetime
+import pytz
+import re
+from contextlib import contextmanager
+from dataclasses import dataclass
+from io import StringIO
+from time import sleep
+from typing import Optional, Tuple, Union, Any, List
+
+import agate
+import dbt.clients.agate_helper
+
+from clickzetta.enums import LoginParams
+from clickzetta.dbapi.connection import Connection as ClickZettaConnection
+from clickzetta.client import Client
+
+from dbt.exceptions import (
+    DbtInternalError,
+    DbtRuntimeError,
+    FailedToConnectError,
+    DbtDatabaseError,
+    DbtProfileError,
+)
+from dbt.adapters.base import Credentials  # type: ignore
+from dbt.contracts.connection import AdapterResponse, Connection
+from dbt.adapters.sql import SQLConnectionManager  # type: ignore
+from dbt.events import AdapterLogger  # type: ignore
+from dbt.events.functions import warn_or_error
+from dbt.events.types import AdapterEventWarning
+from dbt.ui import line_wrap_message, warning_tag
+
+logger = AdapterLogger("ClickZetta")
+ROW_VALUE_REGEX = re.compile(r"Row Values: \[.*\]")
+
+
+@dataclass
+class ClickZettaAdapterResponse(AdapterResponse):
+    query_id: str = ""
+
+
+@dataclass
+class ClickZettaCredentials(Credentials):
+    workspace: str
+    instance_name: str
+    vc_name: str
+    password: str
+    base_url: str
+    user_name: str = ""
+    schema: str = "public"
+    connect_retries: int = 3
+    reuse_connections: bool = True
+
+    @property
+    def type(self):
+        return "clickzetta"
+
+    @property
+    def unique_field(self):
+        return self.user_name
+
+    def _connection_keys(self):
+        return (
+            "workspace",
+            "instance_name",
+            "vc_name",
+            "user_name",
+            "schema",
+            "password",
+            "base_url",
+        )
+
+
+class ClickZettaConnectionManager(SQLConnectionManager):
+    TYPE = "clickzetta"
+
+    @contextmanager
+    def exception_handler(self, sql):
+        try:
+            yield
+        except Exception as e:
+            logger.debug("Error running SQL: {}", sql)
+            logger.debug("Rolling back transaction.")
+            self.rollback_if_open()
+            if isinstance(e, DbtRuntimeError):
+                # during a sql query, an internal to dbt exception was raised.
+                # this sounds a lot like a signal handler and probably has
+                # useful information, so raise it without modification.
+                raise
+            raise DbtRuntimeError(str(e)) from e
+
+    @classmethod
+    def open(cls, connection):
+        if connection.state == "open":
+            logger.debug("Connection is already open, skipping open.")
+            return connection
+
+        creds = connection.credentials
+
+        def connect():
+            session_parameters = {}
+            log_params = LoginParams(
+                username=creds.user_name,
+                password=creds.password,
+                instance_name=creds.instance_name,
+            )
+            client = Client(
+                log_params=log_params,
+                workspace=creds.workspace,
+                vc_name=creds.vc_name,
+                instance_name=creds.instance_name,
+                schema=creds.schema,
+                base_url=creds.base_url,
+            )
+            handle = ClickZettaConnection(client=client)
+
+            return handle
+
+        def exponential_backoff(attempt: int):
+            return attempt * attempt
+
+        return cls.retry_connection(
+            connection,
+            connect=connect,
+            logger=logger,
+            retry_limit=creds.connect_retries,
+            retry_timeout=exponential_backoff,
+        )
+
+    def cancel(self, connection):
+        pass
+
+    @classmethod
+    def get_response(cls, cursor) -> ClickZettaAdapterResponse:
+        code = cursor.rowcount
+
+        if code is not None:
+            code = "SUCCESS"
+
+        return ClickZettaAdapterResponse(
+            _message="{} {}".format(code, cursor.rowcount),
+            rows_affected=cursor.rowcount,
+            code=code,
+        )  # type: ignore
+
+    def add_begin_query(self, *args, **kwargs):
+        pass
+
+    def add_commit_query(self, *args, **kwargs):
+        pass
+
+    def begin(self):
+        pass
+
+    def commit(self):
+        pass
+
+    def clear_transaction(self):
+        pass
+
+    @classmethod
+    def _split_queries(cls, sql):
+        pass
+
+    @classmethod
+    def process_results(cls, column_names, rows):
+        fixed = []
+        for row in rows:
+            fixed_row = []
+            for col in row:
+                fixed_row.append(col)
+
+            fixed.append(fixed_row)
+
+        return super().process_results(column_names, fixed)
+
+    def execute(
+            self, sql: str, auto_begin: bool = False, fetch: bool = False, limit: Optional[int] = None
+    ) -> Tuple[AdapterResponse, agate.Table]:
+        _, cursor = self.add_query(sql, auto_begin)
+        response = self.get_response(cursor)
+        if fetch:
+            table = self.get_result_from_cursor(cursor, limit)
+        else:
+            table = dbt.clients.agate_helper.empty_table()
+        return response, table
+
+    def add_standard_query(self, sql: str, **kwargs) -> Tuple[Connection, Any]:
+        return super().add_query(self._add_query_comment(sql), **kwargs)
+
+    def add_query(
+            self,
+            sql: str,
+            auto_begin: bool = True,
+            bindings: Optional[Any] = None,
+            abridge_sql_log: bool = False,
+    ) -> Tuple[Connection, Any]:  # type: ignore
+        if bindings:
+            # The clickzetta connector is stricter than, e.g., psycopg2 -
+            # which allows any iterable thing to be passed as a binding.
+            bindings = tuple(bindings)
+        # TODO(hanmiao.li): process single query only, will support multiple queries later.
+        connection, cursor = self._add_standard_queries(
+            [sql],
+            auto_begin=auto_begin,
+            bindings=bindings,
+            abridge_sql_log=abridge_sql_log,
+        )
+
+        if cursor is None:
+            self._raise_cursor_not_found_error(sql)
+
+        return connection, cursor  # type: ignore
+
+    def _add_standard_queries(self, queries: List[str], **kwargs) -> Tuple[Connection, Any]:
+        for query in queries:
+            connection, cursor = self.add_standard_query(query, **kwargs)
+        return connection, cursor
+
+    def _raise_cursor_not_found_error(self, sql: str):
+        conn = self.get_thread_connection()
+        try:
+            conn_name = conn.name
+        except AttributeError:
+            conn_name = None
+
+        raise DbtRuntimeError(
+            f"""Tried to run an empty query on model '{conn_name or "<None>"}'. If you are """
+            f"""conditionally running\nsql, e.g. in a model hook, make """
+            f"""sure your `else` clause contains valid sql!\n\n"""
+            f"""Provided SQL:\n{sql}"""
+        )
+
+    def release(self):
+        if self.profile.credentials.reuse_connections:  # type: ignore
+            return
+        super().release()
