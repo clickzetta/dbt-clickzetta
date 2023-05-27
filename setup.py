@@ -51,7 +51,7 @@ def _get_dbt_core_version():
 
 
 package_name = "dbt-clickzetta"
-package_version = "0.0.1"
+package_version = "0.0.11"
 dbt_core_version = _get_dbt_core_version()
 description = """The ClickZetta adapter plugin for dbt"""
 

@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Mapping, Any, Optional, List, Union, Dict
 
 import agate
+import dbt.exceptions
 
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport  # type: ignore
 from dbt.adapters.sql import SQLAdapter  # type: ignore
@@ -17,6 +18,25 @@ from dbt.contracts.graph.manifest import Manifest
 from dbt.contracts.graph.nodes import ConstraintType
 from dbt.contracts.relation import RelationType
 from dbt.exceptions import CompilationError, DbtDatabaseError, DbtRuntimeError
+from dbt.adapters.base import BaseRelation
+from dbt.clients.agate_helper import DEFAULT_TYPE_TESTER
+from dbt.contracts.connection import AdapterResponse
+from dbt.contracts.graph.nodes import ConstraintType
+from dbt.contracts.relation import RelationType
+from dbt.events import AdapterLogger
+from dbt.utils import executor, AttrDict
+
+GET_COLUMNS_IN_RELATION_RAW_MACRO_NAME = "get_columns_in_relation_raw"
+LIST_SCHEMAS_MACRO_NAME = "list_schemas"
+LIST_RELATIONS_MACRO_NAME = "list_relations_without_caching"
+LIST_RELATIONS_SHOW_TABLES_MACRO_NAME = "list_relations_show_tables_without_caching"
+DESCRIBE_TABLE_EXTENDED_MACRO_NAME = "describe_table_extended_without_caching"
+
+TABLE_OR_VIEW_NOT_FOUND_MESSAGES = (
+    "[TABLE_OR_VIEW_NOT_FOUND]",
+    "Table or view not found",
+    "NoSuchTableException",
+)
 
 
 @dataclass
@@ -41,7 +61,7 @@ class ClickZettaAdapter(SQLAdapter):
 
     @classmethod
     def date_function(cls):
-        return "CURRENT_TIMESTAMP()"
+        return "current_timestamp()"
 
     @classmethod
     def _catalog_filter_table(cls, table: agate.Table, manifest: Manifest) -> agate.Table:
@@ -51,29 +71,58 @@ class ClickZettaAdapter(SQLAdapter):
     @classmethod
     def convert_number_type(cls, agate_table: agate.Table, col_idx: int) -> str:
         decimals = agate_table.aggregate(agate.MaxPrecision(col_idx))
-        return 'FLOAT' if decimals else 'INT'
+        return 'float64' if decimals else 'int64'
 
     @classmethod
     def convert_datetime_type(cls, agate_table: agate.Table, col_idx: int) -> str:
-        return 'DATE'
+        return 'date'
 
-    def list_schemas(self, database: str) -> List[str]:
+    def quote(self, identifier):
+        return "`{}`".format(identifier)
+
+    def parse_describe_extended(
+            self, relation: BaseRelation, raw_rows: AttrDict
+    ) -> List[ClickZettaColumn]:
+        # Convert the Row to a dict
+        dict_rows = [dict(zip(row._keys, row._values)) for row in raw_rows]
+
+        rows = [row for row in dict_rows if not row["col_name"].startswith("#")]
+
+        return [
+            ClickZettaColumn(
+                table_database=None,
+                table_schema=relation.schema,
+                table_name=relation.name,
+                column=column["col_name"],
+                dtype=column["data_type"],
+            )
+            for idx, column in enumerate(rows)
+        ]
+
+    def get_columns_in_relation(self, relation: BaseRelation) -> List[ClickZettaColumn]:
+        columns = []
         try:
-            results = self.execute_macro(LIST_SCHEMAS_MACRO_NAME, kwargs={"database": database})
-        except DbtDatabaseError as exc:
-            msg = f"Database error while listing schemas in database " f'"{database}"\n{exc}'
-            raise DbtRuntimeError(msg)
-
-        return [row["schema_name"] for row in results]
-
-    def get_columns_in_relation(self, relation):
-        try:
-            return super().get_columns_in_relation(relation)
-        except DbtDatabaseError as exc:
-            if "does not exist or not authorized" in str(exc):
-                return []
+            rows: AttrDict = self.execute_macro(
+                GET_COLUMNS_IN_RELATION_RAW_MACRO_NAME, kwargs={"relation": relation}
+            )
+            columns = self.parse_describe_extended(relation, rows)
+        except dbt.exceptions.DbtRuntimeError as e:
+            errmsg = getattr(e, "msg", "")
+            found_msgs = (msg in errmsg for msg in TABLE_OR_VIEW_NOT_FOUND_MESSAGES)
+            if any(found_msgs):
+                pass
             else:
-                raise
+                raise e
+
+        # strip hudi metadata columns.
+        columns = [x for x in columns]
+        return columns
+
+    def check_schema_exists(self, database, schema):
+        results = self.execute_macro(LIST_SCHEMAS_MACRO_NAME, kwargs={"database": database})
+
+        exists = True if schema in [row[0] for row in results] else False
+        return exists
 
     def list_relations_without_caching(self, schema_relation: ClickZettaRelation) \
             -> List[ClickZettaRelation]:  # type: ignore

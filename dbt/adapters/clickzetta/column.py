@@ -1,11 +1,18 @@
 from dataclasses import dataclass
+from typing import Any, Dict, Optional, TypeVar, Union
 
 from dbt.adapters.base.column import Column
 from dbt.exceptions import DbtRuntimeError
+from hologram import JsonDict
+from dbt.dataclass_schema import dbtClassMixin
 
 
 @dataclass
-class ClickZettaColumn(Column):
+class ClickZettaColumn(dbtClassMixin, Column):  # type: ignore
+    table_database: Optional[str] = None
+    table_schema: Optional[str] = None
+    table_name: Optional[str] = None
+
     def is_integer(self) -> bool:
         return self.dtype.lower() in [
             "int8",
@@ -29,11 +36,6 @@ class ClickZettaColumn(Column):
             "char",
         ]
 
-    def string_size(self) -> int:
-        if not self.is_string():
-            raise DbtRuntimeError("Called string_size() on non-string field!")
-
-        if self.dtype == "string" or self.char_size is None:
-            return 16777216
-        else:
-            return int(self.char_size)
+    def to_column_dict(self, omit_none: bool = True, validate: bool = False) -> JsonDict:
+        original_dict = self.to_dict(omit_none=omit_none)
+        return original_dict

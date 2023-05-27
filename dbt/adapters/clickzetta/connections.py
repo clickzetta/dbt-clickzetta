@@ -41,6 +41,7 @@ class ClickZettaAdapterResponse(AdapterResponse):
 
 @dataclass
 class ClickZettaCredentials(Credentials):
+    database: Optional[str]  # type: ignore
     workspace: str = ""
     instance_name: str = ""
     vc_name: str = "default"
@@ -50,6 +51,13 @@ class ClickZettaCredentials(Credentials):
     schema: str = "public"
     connect_retries: int = 3
     reuse_connections: bool = True
+
+    @classmethod
+    def __pre_deserialize__(cls, data):
+        data = super().__pre_deserialize__(data)
+        if "database" not in data:
+            data["database"] = None
+        return data
 
     @property
     def type(self):
