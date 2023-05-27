@@ -263,7 +263,7 @@
 
 {% macro clickzetta__list_relations_without_caching(relation) %}
   {% call statement('list_relations_without_caching', fetch_result=True) -%}
-    show table extended in {{ relation }} like '*'
+    show tables in {{ relation }}
   {% endcall %}
 
   {% do return(load_result('list_relations_without_caching').table) %}
@@ -271,7 +271,7 @@
 
 {% macro list_relations_show_tables_without_caching(schema_relation) %}
   {% call statement('list_relations_without_caching_show_tables', fetch_result=True) -%}
-    show tables in {{ schema_relation }} like '*'
+    show tables in {{ schema_relation }}
   {% endcall %}
 
   {% do return(load_result('list_relations_without_caching_show_tables').table) %}

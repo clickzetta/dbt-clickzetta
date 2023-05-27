@@ -41,11 +41,11 @@ class ClickZettaAdapterResponse(AdapterResponse):
 
 @dataclass
 class ClickZettaCredentials(Credentials):
-    workspace: str
-    instance_name: str
-    vc_name: str
-    password: str
-    base_url: str
+    workspace: str = ""
+    instance_name: str = ""
+    vc_name: str = "default"
+    password: str = ""
+    base_url: str = ""
     user_name: str = ""
     schema: str = "public"
     connect_retries: int = 3
@@ -79,7 +79,8 @@ class ClickZettaConnectionManager(SQLConnectionManager):
         try:
             yield
         except Exception as e:
-            logger.debug("Error running SQL: {}", sql)
+            logger.warning("Error running SQL: {}", sql)
+            logger.warning("Exception {}", e)
             logger.debug("Rolling back transaction.")
             self.rollback_if_open()
             if isinstance(e, DbtRuntimeError):
@@ -105,7 +106,7 @@ class ClickZettaConnectionManager(SQLConnectionManager):
                 instance_name=creds.instance_name,
             )
             client = Client(
-                log_params=log_params,
+                login_params=log_params,
                 workspace=creds.workspace,
                 vc_name=creds.vc_name,
                 instance_name=creds.instance_name,
@@ -125,6 +126,7 @@ class ClickZettaConnectionManager(SQLConnectionManager):
             logger=logger,
             retry_limit=creds.connect_retries,
             retry_timeout=exponential_backoff,
+            retryable_exceptions=[],
         )
 
     def cancel(self, connection):
@@ -133,7 +135,7 @@ class ClickZettaConnectionManager(SQLConnectionManager):
     @classmethod
     def get_response(cls, cursor) -> ClickZettaAdapterResponse:
         code = cursor.rowcount
-
+        logger.info(f"code: {code}")
         if code is not None:
             code = "SUCCESS"
 
@@ -180,7 +182,7 @@ class ClickZettaConnectionManager(SQLConnectionManager):
         _, cursor = self.add_query(sql, auto_begin)
         response = self.get_response(cursor)
         if fetch:
-            table = self.get_result_from_cursor(cursor, limit)
+            table = self.get_result_from_cursor(cursor)
         else:
             table = dbt.clients.agate_helper.empty_table()
         return response, table

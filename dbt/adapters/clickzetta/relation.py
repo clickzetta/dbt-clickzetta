@@ -12,3 +12,4 @@ class ClickZettaQuotePolicy(Policy):
 @dataclass(frozen=True, eq=False, repr=False)
 class ClickZettaRelation(BaseRelation):
     quote_policy: ClickZettaQuotePolicy = field(default_factory=lambda: ClickZettaQuotePolicy())
+    quote_character = "`"

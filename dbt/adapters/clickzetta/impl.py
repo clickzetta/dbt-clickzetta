@@ -15,6 +15,7 @@ from dbt.adapters.clickzetta import ClickZettaRelation
 from dbt.adapters.clickzetta import ClickZettaColumn
 from dbt.contracts.graph.manifest import Manifest
 from dbt.contracts.graph.nodes import ConstraintType
+from dbt.contracts.relation import RelationType
 from dbt.exceptions import CompilationError, DbtDatabaseError, DbtRuntimeError
 
 
@@ -63,7 +64,7 @@ class ClickZettaAdapter(SQLAdapter):
             msg = f"Database error while listing schemas in database " f'"{database}"\n{exc}'
             raise DbtRuntimeError(msg)
 
-        return [row["name"] for row in results]
+        return [row["schema_name"] for row in results]
 
     def get_columns_in_relation(self, relation):
         try:
@@ -74,8 +75,8 @@ class ClickZettaAdapter(SQLAdapter):
             else:
                 raise
 
-    def list_relations_without_caching(self, schema_relation: ClickZettaRelation) -> List[
-        ClickZettaRelation]:  # type: ignore
+    def list_relations_without_caching(self, schema_relation: ClickZettaRelation) \
+            -> List[ClickZettaRelation]:  # type: ignore
         kwargs = {"schema_relation": schema_relation}
         try:
             results = self.execute_macro(LIST_RELATIONS_MACRO_NAME, kwargs=kwargs)
@@ -85,17 +86,21 @@ class ClickZettaAdapter(SQLAdapter):
             raise
 
         relations = []
-        quote_policy = {"database": True, "schema": True, "identifier": True}
-
-        columns = ["database_name", "schema_name", "name", "kind"]
-        for _database, _schema, _identifier, _type in results.select(columns):  # type: ignore
+        quote_policy = {"database": False, "schema": True, "identifier": True}
+        for row in results:
+            _schema, _identifier, _is_view, _is_materialized_view = row
             try:
-                _type = self.Relation.get_relation_type(_type.lower())
+                if _is_view == 'true':
+                    _type = RelationType.View
+                elif _is_materialized_view == 'true':
+                    _type = RelationType.MaterializedView
+                else:
+                    _type = RelationType.Table
             except ValueError:
                 _type = self.Relation.External
             relations.append(
                 self.Relation.create(
-                    database=_database,
+                    database=None,
                     schema=_schema,
                     identifier=_identifier,
                     quote_policy=quote_policy,
