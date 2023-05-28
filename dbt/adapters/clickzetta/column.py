@@ -13,6 +13,10 @@ class ClickZettaColumn(dbtClassMixin, Column):  # type: ignore
     table_schema: Optional[str] = None
     table_name: Optional[str] = None
 
+    @classmethod
+    def translate_type(cls, dtype: str) -> str:
+        return dtype
+
     def is_integer(self) -> bool:
         return self.dtype.lower() in [
             "int8",
@@ -28,6 +32,14 @@ class ClickZettaColumn(dbtClassMixin, Column):  # type: ignore
             # TODO(hanmiao.li): decimal is a subclass of float, but we don't want to treat it
             # "decimal",
         ]
+
+    @property
+    def quoted(self) -> str:
+        return "`{}`".format(self.column)
+
+    @property
+    def data_type(self) -> str:
+        return self.dtype
 
     def is_string(self) -> bool:
         return self.dtype.lower() in [

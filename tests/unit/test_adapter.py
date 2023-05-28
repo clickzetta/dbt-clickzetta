@@ -62,6 +62,7 @@ class TestClickZettaAdapter(unittest.TestCase):
         self.assertEqual(connection.credentials.schema, "dbt")
         self.assertIsNone(connection.credentials.database)
 
+
     def test_parse_relation(self):
         self.maxDiff = None
         rel_type = ClickZettaRelation.get_relation_type.Table
