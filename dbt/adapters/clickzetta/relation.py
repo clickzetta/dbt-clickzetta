@@ -27,9 +27,9 @@ class ClickZettaRelation(BaseRelation):
             raise DbtRuntimeError("Cannot set database in clickzetta!")
 
     def render(self):
-        if self.include_policy.database and self.include_policy.schema:
-            raise DbtRuntimeError(
-                "Got a clickzetta relation with schema and database set to "
-                "include, but only one can be set"
-            )
+        # if self.include_policy.database and self.include_policy.schema:
+        #     raise DbtRuntimeError(
+        #         "Got a clickzetta relation with schema and database set to "
+        #         "include, but only one can be set"
+        #     )
         return super().render()

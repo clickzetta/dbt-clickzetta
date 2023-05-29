@@ -61,7 +61,9 @@ class TestClickZettaAdapter(unittest.TestCase):
         self.assertEqual(connection.credentials.user_name, "cz_lh_smoke_test")
         self.assertEqual(connection.credentials.schema, "dbt")
         self.assertIsNone(connection.credentials.database)
-
+        sql = """/* this is a comment */
+                    show tables in playground;"""
+        res, table = adapter.connections.execute(sql=sql, fetch=True, auto_begin=True)
 
     def test_parse_relation(self):
         self.maxDiff = None

@@ -172,22 +172,11 @@ class ClickZettaConnectionManager(SQLConnectionManager):
     def _split_queries(cls, sql):
         pass
 
-    @classmethod
-    def process_results(cls, column_names, rows):
-        fixed = []
-        for row in rows:
-            fixed_row = []
-            for col in row:
-                fixed_row.append(col)
-
-            fixed.append(fixed_row)
-
-        return super().process_results(column_names, fixed)
-
     def execute(
             self, sql: str, auto_begin: bool = False, fetch: bool = False, limit: Optional[int] = None
     ) -> Tuple[AdapterResponse, agate.Table]:
         _, cursor = self.add_query(sql, auto_begin)
+        logger.info(f"dbt_execute_sql: {sql}")
         response = self.get_response(cursor)
         if fetch:
             table = self.get_result_from_cursor(cursor)
