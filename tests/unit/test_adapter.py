@@ -35,7 +35,7 @@ class TestClickZettaAdapter(unittest.TestCase):
                         "base_url": "https://dev-api.zettadecision.com",
                         "workspace": "system_smoke",
                         "instance_name": "clickzetta",
-                        "vc_name": "vcz_gp_daily",
+                        "vc_name": "cz_gp_daily",
                         "user_name": "cz_lh_smoke_test",
                         "schema": "dbt",
                         "password": "Abc123456",
@@ -56,14 +56,14 @@ class TestClickZettaAdapter(unittest.TestCase):
         self.assertIsNotNone(connection.handle)
         self.assertEqual(connection.credentials.workspace, "system_smoke")
         self.assertEqual(connection.credentials.instance_name, "clickzetta")
-        self.assertEqual(connection.credentials.vc_name, "vcz_gp_daily")
+        self.assertEqual(connection.credentials.vc_name, "cz_gp_daily")
         self.assertEqual(connection.credentials.password, "Abc123456")
         self.assertEqual(connection.credentials.base_url, "https://dev-api.zettadecision.com")
         self.assertEqual(connection.credentials.user_name, "cz_lh_smoke_test")
         self.assertEqual(connection.credentials.schema, "dbt")
         self.assertIsNone(connection.credentials.database)
         sql = """/* this is a comment */
-            show tables in  playground;"""
+            show create table _airbyte_raw_airbyte_write_test"""
 
         res, table = adapter.connections.execute(sql=sql, fetch=True, auto_begin=True)
         print(table.rows)
