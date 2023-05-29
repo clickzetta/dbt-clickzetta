@@ -6,6 +6,7 @@ from dbt.exceptions import DbtRuntimeError
 from agate import Row
 from dbt.adapters.clickzetta import ClickZettaAdapter, ClickZettaRelation
 from .utils import config_from_parts_or_dicts
+import sqlparse
 
 
 class TestClickZettaAdapter(unittest.TestCase):
@@ -62,8 +63,10 @@ class TestClickZettaAdapter(unittest.TestCase):
         self.assertEqual(connection.credentials.schema, "dbt")
         self.assertIsNone(connection.credentials.database)
         sql = """/* this is a comment */
-                    show tables in playground;"""
+            show tables in  playground;"""
+
         res, table = adapter.connections.execute(sql=sql, fetch=True, auto_begin=True)
+        print(table.rows)
 
     def test_parse_relation(self):
         self.maxDiff = None
