@@ -51,7 +51,7 @@ def _get_dbt_core_version():
 
 
 package_name = "dbt-clickzetta"
-package_version = "0.1.3"
+package_version = "0.1.4"
 dbt_core_version = _get_dbt_core_version()
 description = """The ClickZetta adapter plugin for dbt"""
 
@@ -68,7 +68,7 @@ setup(
     include_package_data=True,
     install_requires=[
         "dbt-core~={}".format(dbt_core_version),
-        "clickzetta-connector~=0.8.2",
+        "clickzetta-connector~=0.8.3",
     ],
     zip_safe=False,
     classifiers=[
