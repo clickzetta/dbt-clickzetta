@@ -249,14 +249,14 @@
 
 {% macro clickzetta__get_columns_in_relation_raw(relation) -%}
   {% call statement('get_columns_in_relation_raw', fetch_result=True) %}
-      describe extended {{ relation }}
+      show columns in {{ relation }}
   {% endcall %}
   {% do return(load_result('get_columns_in_relation_raw').table) %}
 {% endmacro %}
 
 {% macro clickzetta__get_columns_in_relation(relation) -%}
   {% call statement('get_columns_in_relation', fetch_result=True) %}
-      describe extended {{ relation.include(schema=(schema is not none)) }}
+      show columns in {{ relation.include(schema=(schema is not none)) }}
   {% endcall %}
   {% do return(load_result('get_columns_in_relation').table) %}
 {% endmacro %}

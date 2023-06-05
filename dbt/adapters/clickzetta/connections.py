@@ -187,6 +187,7 @@ class ClickZettaConnectionManager(SQLConnectionManager):
     def add_standard_query(self, sql: str, **kwargs) -> Tuple[Connection, Any]:
         return super().add_query(self._add_query_comment(sql), **kwargs)
 
+
     def add_query(
             self,
             sql: str,
@@ -194,11 +195,14 @@ class ClickZettaConnectionManager(SQLConnectionManager):
             bindings: Optional[Any] = None,
             abridge_sql_log: bool = False,
     ) -> Tuple[Connection, Any]:  # type: ignore
+        # TODO(hanmiao.li): clickzetta cursor is not support pass bingdings, will support later.
         if bindings:
-            # The clickzetta connector is stricter than, e.g., psycopg2 -
-            # which allows any iterable thing to be passed as a binding.
-            bindings = tuple(bindings)
-        # TODO(hanmiao.li): process single query only, will support multiple queries later.
+            cast_bindings = []
+            for binding in bindings:
+                cast_bindings.append(f"'{str(binding)}'")
+            sql = sql % tuple(cast_bindings)
+            bindings = None
+
         connection, cursor = self._add_standard_queries(
             [sql],
             auto_begin=auto_begin,

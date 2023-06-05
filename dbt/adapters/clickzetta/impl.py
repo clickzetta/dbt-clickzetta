@@ -31,6 +31,7 @@ LIST_SCHEMAS_MACRO_NAME = "list_schemas"
 LIST_RELATIONS_MACRO_NAME = "list_relations_without_caching"
 LIST_RELATIONS_SHOW_TABLES_MACRO_NAME = "list_relations_show_tables_without_caching"
 DESCRIBE_TABLE_EXTENDED_MACRO_NAME = "describe_table_extended_without_caching"
+DROP_RELATION_MACRO_NAME = "drop_relation"
 
 TABLE_OR_VIEW_NOT_FOUND_MESSAGES = (
     "[TABLE_OR_VIEW_NOT_FOUND]",
@@ -69,13 +70,25 @@ class ClickZettaAdapter(SQLAdapter):
         return super()._catalog_filter_table(lowered, manifest)
 
     @classmethod
-    def convert_number_type(cls, agate_table: agate.Table, col_idx: int) -> str:
-        decimals = agate_table.aggregate(agate.MaxPrecision(col_idx))
-        return 'float64' if decimals else 'int64'
+    def convert_text_type(cls, agate_table, col_idx):
+        return "string"
 
     @classmethod
-    def convert_datetime_type(cls, agate_table: agate.Table, col_idx: int) -> str:
-        return 'date'
+    def convert_number_type(cls, agate_table, col_idx):
+        decimals = agate_table.aggregate(agate.MaxPrecision(col_idx))
+        return "double" if decimals else "bigint"
+
+    @classmethod
+    def convert_date_type(cls, agate_table, col_idx):
+        return "date"
+
+    @classmethod
+    def convert_time_type(cls, agate_table, col_idx):
+        return "time"
+
+    @classmethod
+    def convert_datetime_type(cls, agate_table, col_idx):
+        return "timestamp"
 
     def quote(self, identifier):
         return "`{}`".format(identifier)
@@ -86,14 +99,14 @@ class ClickZettaAdapter(SQLAdapter):
         # Convert the Row to a dict
         dict_rows = [dict(zip(row._keys, row._values)) for row in raw_rows]
 
-        rows = [row for row in dict_rows if not row["col_name"].startswith("#")]
+        rows = [row for row in dict_rows if not row["column_name"].startswith("#")]
 
         return [
             ClickZettaColumn(
                 table_database=None,
                 table_schema=relation.schema,
                 table_name=relation.name,
-                column=column["col_name"],
+                column=column["column_name"],
                 dtype=column["data_type"],
             )
             for idx, column in enumerate(rows)
@@ -114,7 +127,6 @@ class ClickZettaAdapter(SQLAdapter):
             else:
                 raise e
 
-        # strip hudi metadata columns.
         columns = [x for x in columns]
         return columns
 
