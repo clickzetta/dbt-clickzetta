@@ -10,8 +10,6 @@ from typing import Optional, Tuple, Union, Any, List
 
 import agate
 import dbt.clients.agate_helper
-
-from clickzetta.enums import LoginParams
 from clickzetta.dbapi.connection import Connection as ClickZettaConnection
 from clickzetta.client import Client
 
@@ -42,21 +40,25 @@ class ClickZettaAdapterResponse(AdapterResponse):
 @dataclass
 class ClickZettaCredentials(Credentials):
     database: Optional[str]  # type: ignore
-    workspace: str = ""
-    instance_name: str = ""
-    vc_name: str = "default"
-    password: str = ""
-    base_url: str = ""
-    user_name: str = ""
-    schema: str = "public"
+    workspace: Optional[str] = None
+    instance: Optional[str] = None
+    vcluster: Optional[str] = "default"
+    password: Optional[str] = None
+    service: Optional[str] = None
+    username: Optional[str] = None
+    schema: Optional[str] = "public"
     connect_retries: int = 3
     reuse_connections: bool = True
 
     @classmethod
     def __pre_deserialize__(cls, data):
         data = super().__pre_deserialize__(data)
+        if "workspace" not in data:
+            raise DbtProfileError(
+                "The 'workspace' field is required for ClickZetta connections."
+            )
         if "database" not in data:
-            data["database"] = None
+            data["database"] = data["workspace"]
         return data
 
     @property
@@ -65,17 +67,17 @@ class ClickZettaCredentials(Credentials):
 
     @property
     def unique_field(self):
-        return self.user_name
+        return self.username
 
     def _connection_keys(self):
         return (
             "workspace",
-            "instance_name",
-            "vc_name",
-            "user_name",
+            "instance",
+            "vcluster",
+            "username",
             "schema",
             "password",
-            "base_url",
+            "service",
         )
 
 
@@ -108,18 +110,14 @@ class ClickZettaConnectionManager(SQLConnectionManager):
 
         def connect():
             session_parameters = {}
-            log_params = LoginParams(
-                username=creds.user_name,
-                password=creds.password,
-                instance_name=creds.instance_name,
-            )
             client = Client(
-                login_params=log_params,
+                username=creds.username,
+                password=creds.password,
+                instance=creds.instance,
                 workspace=creds.workspace,
-                vc_name=creds.vc_name,
-                instance_name=creds.instance_name,
+                vcluster=creds.vcluster,
                 schema=creds.schema,
-                base_url=creds.base_url,
+                service=creds.service,
             )
             handle = ClickZettaConnection(client=client)
 

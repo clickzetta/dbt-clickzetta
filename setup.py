@@ -2,17 +2,13 @@
 import os
 import sys
 import re
-
 # require python 3.7 or newer
 if sys.version_info < (3, 7):
     print("Error: dbt does not support this version of Python.")
     print("Please upgrade to Python 3.7 or higher.")
     sys.exit(1)
-
-
 # require version of setuptools that supports find_namespace_packages
 from setuptools import setup
-
 try:
     from setuptools import find_namespace_packages
 except ImportError:
@@ -20,14 +16,10 @@ except ImportError:
     print("Error: dbt requires setuptools v40.1.0 or higher.")
     print('Please upgrade setuptools with "pip install --upgrade setuptools" ' "and try again")
     sys.exit(1)
-
-
 # pull long description from README
 this_directory = os.path.abspath(os.path.dirname(__file__))
 with open(os.path.join(this_directory, "README.md")) as f:
     long_description = f.read()
-
-
 # get this package's version from dbt/adapters/<name>/__version__.py
 def _get_plugin_version_dict():
     _version_path = os.path.join(this_directory, "dbt", "adapters", "clickzetta", "__version__.py")
@@ -40,21 +32,16 @@ def _get_plugin_version_dict():
         if match is None:
             raise ValueError(f"invalid version at {_version_path}")
         return match.groupdict()
-
-
 # require a compatible minor version (~=), prerelease if this is a prerelease
 def _get_dbt_core_version():
     parts = _get_plugin_version_dict()
     minor = "{major}.{minor}.0".format(**parts)
     pre = parts["prekind"] + "1" if parts["prekind"] else ""
     return f"{minor}{pre}"
-
-
 package_name = "dbt-clickzetta"
-package_version = "0.2.7"
+package_version = "0.2.12"
 dbt_core_version = _get_dbt_core_version()
 description = """The ClickZetta adapter plugin for dbt"""
-
 setup(
     name=package_name,
     version=package_version,
@@ -68,7 +55,7 @@ setup(
     include_package_data=True,
     install_requires=[
         "dbt-core~={}".format(dbt_core_version),
-        "clickzetta-connector~=0.8.5",
+        "clickzetta-connector~=0.8.12",
     ],
     zip_safe=False,
     classifiers=[

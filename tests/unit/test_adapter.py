@@ -32,11 +32,11 @@ class TestClickZettaAdapter(unittest.TestCase):
                 "outputs": {
                     "test": {
                         "type": "clickzetta",
-                        "base_url": "https://dev-api.zettadecision.com",
+                        "service": "https://dev-api.zettadecision.com",
                         "workspace": "system_smoke",
-                        "instance_name": "clickzetta",
-                        "vc_name": "cz_gp_daily",
-                        "user_name": "cz_lh_smoke_test",
+                        "instance": "clickzetta",
+                        "vcluster": "cz_gp_daily",
+                        "username": "cz_lh_smoke_test",
                         "schema": "dbt",
                         "password": "Abc123456",
                     }
@@ -55,13 +55,13 @@ class TestClickZettaAdapter(unittest.TestCase):
         self.assertEqual(connection.state, "open")
         self.assertIsNotNone(connection.handle)
         self.assertEqual(connection.credentials.workspace, "system_smoke")
-        self.assertEqual(connection.credentials.instance_name, "clickzetta")
-        self.assertEqual(connection.credentials.vc_name, "cz_gp_daily")
+        self.assertEqual(connection.credentials.instance, "clickzetta")
+        self.assertEqual(connection.credentials.vcluster, "cz_gp_daily")
         self.assertEqual(connection.credentials.password, "Abc123456")
-        self.assertEqual(connection.credentials.base_url, "https://dev-api.zettadecision.com")
-        self.assertEqual(connection.credentials.user_name, "cz_lh_smoke_test")
+        self.assertEqual(connection.credentials.service, "https://dev-api.zettadecision.com")
+        self.assertEqual(connection.credentials.username, "cz_lh_smoke_test")
         self.assertEqual(connection.credentials.schema, "dbt")
-        self.assertIsNone(connection.credentials.database)
+        self.assertEqual(connection.credentials.database, "system_smoke")
         sql = """/* this is a comment */
             show create table _airbyte_raw_airbyte_write_test"""
 
