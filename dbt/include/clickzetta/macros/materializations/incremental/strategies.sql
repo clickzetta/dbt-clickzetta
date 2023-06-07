@@ -2,15 +2,9 @@
 
     {%- set dest_columns = adapter.get_columns_in_relation(target_relation) -%}
     {%- set dest_cols_csv = dest_columns | map(attribute='quoted') | join(', ') -%}
-    {% if existing_relation.is_iceberg %}
-      {# removed table from statement for iceberg #}
-      insert overwrite {{ target_relation }}
-      {# removed partition_cols for iceberg as well #}
-    {% else %}
       insert overwrite table {{ target_relation }}
       {{ partition_cols(label="partition") }}
-    {% endif %}
-    select {{dest_cols_csv}} from {{ source_relation }}
+      select {{dest_cols_csv}} from {{ source_relation }}
 
 {% endmacro %}
 

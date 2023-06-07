@@ -32,7 +32,7 @@ class TestClickZettaAdapter(unittest.TestCase):
                 "outputs": {
                     "test": {
                         "type": "clickzetta",
-                        "service": "https://dev-api.zettadecision.com",
+                        "service": "dev-api.zettadecision.com",
                         "workspace": "system_smoke",
                         "instance": "clickzetta",
                         "vcluster": "cz_gp_daily",
@@ -52,13 +52,14 @@ class TestClickZettaAdapter(unittest.TestCase):
         connection = adapter.acquire_connection("dummy")
         connection.handle  # trigger lazy-load
 
+
         self.assertEqual(connection.state, "open")
         self.assertIsNotNone(connection.handle)
         self.assertEqual(connection.credentials.workspace, "system_smoke")
         self.assertEqual(connection.credentials.instance, "clickzetta")
         self.assertEqual(connection.credentials.vcluster, "cz_gp_daily")
         self.assertEqual(connection.credentials.password, "Abc123456")
-        self.assertEqual(connection.credentials.service, "https://dev-api.zettadecision.com")
+        self.assertEqual(connection.credentials.service, "dev-api.zettadecision.com")
         self.assertEqual(connection.credentials.username, "cz_lh_smoke_test")
         self.assertEqual(connection.credentials.schema, "dbt")
         self.assertEqual(connection.credentials.database, "system_smoke")

@@ -134,7 +134,7 @@
 
 {#-- We can't use temporary tables with `create ... as ()` syntax --#}
 {% macro clickzetta__create_temporary_view(relation, compiled_code) -%}
-    create temporary view {{ relation }} as
+    create or replace view {{ relation }} as
       {{ compiled_code }}
 {%- endmacro -%}
 
@@ -170,19 +170,6 @@
     {{ py_write_table(compiled_code=compiled_code, target_relation=relation) }}
   {%- endif -%}
 {%- endmacro -%}
-
-
-{% macro persist_constraints(relation, model) %}
-  {{ return(adapter.dispatch('persist_constraints', 'dbt')(relation, model)) }}
-{% endmacro %}
-
-{% macro clickzetta__persist_constraints(relation, model) %}
-  {%- set contract_config = config.get('contract') -%}
-  {% if contract_config.enforced and config.get('file_format', 'delta') == 'delta' %}
-    {% do alter_table_add_constraints(relation, model.constraints) %}
-    {% do alter_column_set_constraints(relation, model.columns) %}
-  {% endif %}
-{% endmacro %}
 
 {% macro alter_table_add_constraints(relation, constraints) %}
   {{ return(adapter.dispatch('alter_table_add_constraints', 'dbt')(relation, constraints)) }}
@@ -355,8 +342,9 @@
 
 
 {% macro clickzetta__alter_column_type(relation, column_name, new_column_type) -%}
+  {% set replace_new_column_type = new_column_type | replace('not null', '') %}
   {% call statement('alter_column_type') %}
-    alter table {{ relation }} alter column {{ column_name }} type {{ new_column_type }};
+    alter table {{ relation }} alter column {{ column_name }} type {{ replace_new_column_type }};
   {% endcall %}
 {% endmacro %}
 

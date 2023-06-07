@@ -39,13 +39,13 @@ class ClickZettaAdapterResponse(AdapterResponse):
 
 @dataclass
 class ClickZettaCredentials(Credentials):
-    database: Optional[str]  # type: ignore
-    workspace: Optional[str] = None
-    instance: Optional[str] = None
+    database: Optional[str] = ""  # type: ignore
+    workspace: Optional[str] = ""
+    instance: Optional[str] = ""
     vcluster: Optional[str] = "default"
-    password: Optional[str] = None
-    service: Optional[str] = None
-    username: Optional[str] = None
+    password: Optional[str] = ""
+    service: Optional[str] = ""
+    username: Optional[str] = ""
     schema: Optional[str] = "public"
     connect_retries: int = 3
     reuse_connections: bool = True
@@ -78,6 +78,7 @@ class ClickZettaCredentials(Credentials):
             "schema",
             "password",
             "service",
+            "database",
         )
 
 

@@ -38,17 +38,12 @@
     {%- call statement('main', language=language) -%}
       {{ create_table_as(False, target_relation, compiled_code, language) }}
     {%- endcall -%}
-    {% do persist_constraints(target_relation, model) %}
-  {%- elif existing_relation.is_view or should_full_refresh() -%}
+  {%- elif existing_relation.is_view -%}
     {#-- Relation must be dropped & recreated --#}
-    {% set is_delta = (file_format == 'delta' and existing_relation.is_delta) %}
-    {% if not is_delta %} {#-- If Delta, we will `create or replace` below, so no need to drop --#}
-      {% do adapter.drop_relation(existing_relation) %}
-    {% endif %}
+    {% do adapter.drop_relation(existing_relation) %}
     {%- call statement('main', language=language) -%}
       {{ create_table_as(False, target_relation, compiled_code, language) }}
     {%- endcall -%}
-    {% do persist_constraints(target_relation, model) %}
   {%- else -%}
     {#-- Relation must be merged --#}
     {%- call statement('create_tmp_relation', language=language) -%}

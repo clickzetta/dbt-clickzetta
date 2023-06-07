@@ -34,8 +34,6 @@
 
   {% do persist_docs(target_relation, model) %}
 
-  {% do persist_constraints(target_relation, model) %}
-
   {{ run_hooks(post_hooks) }}
 
   {{ return({'relations': [target_relation]})}}
