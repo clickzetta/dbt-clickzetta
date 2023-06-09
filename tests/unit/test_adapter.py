@@ -25,6 +25,7 @@ class TestClickZettaAdapter(unittest.TestCase):
             "config-version": 2,
         }
 
+
     def _get_target_http(self, project):
         return config_from_parts_or_dicts(
             project,

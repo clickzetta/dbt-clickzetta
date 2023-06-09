@@ -1,7 +1,7 @@
 {% materialization incremental, adapter='clickzetta', supported_languages=['sql', 'python'] -%}
   {#-- Validate early so we don't run SQL if the file_format + strategy combo is invalid --#}
   {%- set raw_file_format = config.get('file_format', default='parquet') -%}
-  {%- set raw_strategy = config.get('incremental_strategy') or 'append' -%}
+  {%- set raw_strategy = config.get('incremental_strategy') or 'merge' -%}
 
   {%- set file_format = dbt_clickzetta_validate_get_file_format(raw_file_format) -%}
   {%- set strategy = dbt_clickzetta_validate_get_incremental_strategy(raw_strategy, file_format) -%}
