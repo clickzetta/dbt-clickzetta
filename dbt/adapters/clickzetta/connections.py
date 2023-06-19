@@ -49,6 +49,7 @@ class ClickZettaCredentials(Credentials):
     schema: Optional[str] = "public"
     connect_retries: int = 3
     reuse_connections: bool = True
+    split_size: Optional[int] = 64 * 1024 * 1024
 
     @classmethod
     def __pre_deserialize__(cls, data):
@@ -142,7 +143,7 @@ class ClickZettaConnectionManager(SQLConnectionManager):
     @classmethod
     def get_response(cls, cursor) -> ClickZettaAdapterResponse:
         code = cursor.rowcount
-        logger.info(f"code: {code}")
+        logger.debug(f"code: {code}")
         if code is not None:
             code = "SUCCESS"
 
@@ -175,7 +176,7 @@ class ClickZettaConnectionManager(SQLConnectionManager):
             self, sql: str, auto_begin: bool = False, fetch: bool = False, limit: Optional[int] = None
     ) -> Tuple[AdapterResponse, agate.Table]:
         _, cursor = self.add_query(sql, auto_begin)
-        logger.info(f"dbt_execute_sql: {sql}")
+        logger.debug(f"dbt_execute_sql: {sql}")
         response = self.get_response(cursor)
         if fetch:
             table = self.get_result_from_cursor(cursor)
@@ -201,6 +202,8 @@ class ClickZettaConnectionManager(SQLConnectionManager):
                 cast_bindings.append(f"'{str(binding)}'")
             sql = sql % tuple(cast_bindings)
             bindings = None
+
+        bindings = {'hints': {'cz.mapper.file.split.size': self.get_thread_connection().credentials.split_size}}
 
         connection, cursor = self._add_standard_queries(
             [sql],

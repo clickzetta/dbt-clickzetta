@@ -23,7 +23,8 @@
   {# need dest_columns for merge_exclude_columns, default to use "*" #}
   {%- set predicates = [] if incremental_predicates is none else [] + incremental_predicates -%}
   {%- set dest_columns = adapter.get_columns_in_relation(target) -%}
-  {%- set dest_cols_csv = dest_columns | map(attribute='quoted') | join(', ') -%}
+  {%- set source_cols_csv = dest_columns | map(attribute='quoted') | join(',') -%}
+  {%- set dest_cols_csv = dest_columns | map(attribute='quoted') -%}
   {%- set merge_update_columns = config.get('merge_update_columns') -%}
   {%- set merge_exclude_columns = config.get('merge_exclude_columns') -%}
   {%- set update_columns = get_merge_update_columns(merge_update_columns, merge_exclude_columns, dest_columns) -%}
@@ -61,9 +62,13 @@
   {% endif %}
 
   when not matched then insert
-      ({{ dest_cols_csv }})
-  values
-      ({{ dest_cols_csv }})
+     ({{source_cols_csv}})
+  values (
+        {% for col_name in dest_cols_csv -%}
+                DBT_INTERNAL_SOURCE.{{ col_name }}
+                {%- if not loop.last %}, {%- endif %}
+        {%- endfor %}
+    )
 {% endmacro %}
 
 

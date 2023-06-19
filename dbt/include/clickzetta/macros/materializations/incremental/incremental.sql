@@ -19,7 +19,7 @@
 
   {#-- for SQL model we will create temp view that doesn't have database and schema --#}
   {%- if language == 'sql'-%}
-    {%- set tmp_relation = tmp_relation.include(database=false, schema=false) -%}
+    {%- set tmp_relation = tmp_relation.include(database=false, schema=true) -%}
   {%- endif -%}
 
   {#-- Set Overwrite Mode --#}

@@ -40,6 +40,7 @@ class TestClickZettaAdapter(unittest.TestCase):
                         "username": "cz_lh_smoke_test",
                         "schema": "dbt",
                         "password": "Abc123456",
+                        "split_size": 8 * 1024 * 1024,
                     }
                 },
                 "target": "test",
@@ -64,11 +65,13 @@ class TestClickZettaAdapter(unittest.TestCase):
         self.assertEqual(connection.credentials.username, "cz_lh_smoke_test")
         self.assertEqual(connection.credentials.schema, "dbt")
         self.assertEqual(connection.credentials.database, "system_smoke")
+        self.assertEqual(connection.credentials.split_size, 8 * 1024 * 1024)
         sql = """/* this is a comment */
             show create table _airbyte_raw_airbyte_write_test"""
 
-        res, table = adapter.connections.execute(sql=sql, fetch=True, auto_begin=True)
+        res, table = adapter.connections.execute(sql=sql, auto_begin=True, fetch=True)
         print(table.rows)
+
 
     def test_parse_relation(self):
         self.maxDiff = None

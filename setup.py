@@ -39,7 +39,7 @@ def _get_dbt_core_version():
     pre = parts["prekind"] + "1" if parts["prekind"] else ""
     return f"{minor}{pre}"
 package_name = "dbt-clickzetta"
-package_version = "0.2.17"
+package_version = "0.2.26"
 dbt_core_version = _get_dbt_core_version()
 description = """The ClickZetta adapter plugin for dbt"""
 setup(
@@ -55,7 +55,7 @@ setup(
     include_package_data=True,
     install_requires=[
         "dbt-core~={}".format(dbt_core_version),
-        "clickzetta-connector~=0.8.14",
+        "clickzetta-connector~=0.8.15",
     ],
     zip_safe=False,
     classifiers=[
