@@ -9,10 +9,17 @@ class ClickZettaQuotePolicy(Policy):
     schema: bool = False
     identifier: bool = False
 
+@dataclass
+class ClickZettaIncludePolicy(Policy):
+    database: bool = False
+    schema: bool = True
+    identifier: bool = True
+
 
 @dataclass(frozen=True, eq=False, repr=False)
 class ClickZettaRelation(BaseRelation):
     quote_policy: Policy = field(default_factory=lambda: ClickZettaQuotePolicy())
+    include_policy: Policy = field(default_factory=lambda: ClickZettaIncludePolicy())
     quote_character: str = "`"
 
     # def __post_init__(self):

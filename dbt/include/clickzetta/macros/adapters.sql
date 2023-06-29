@@ -380,3 +380,7 @@
   {% do run_query(sql) %}
 
 {% endmacro %}
+
+{%- macro clickzetta__information_schema(relation) -%}
+  SYS.INFORMATION_SCHEMA
+{%- endmacro -%}

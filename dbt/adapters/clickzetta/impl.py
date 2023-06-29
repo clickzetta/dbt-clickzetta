@@ -130,6 +130,11 @@ class ClickZettaAdapter(SQLAdapter):
         columns = [x for x in columns]
         return columns
 
+    def get_relation(self, database: str, schema: str, identifier: str) -> Optional[BaseRelation]:
+        if not self.Relation.get_default_include_policy().database:
+            database = None
+        return super().get_relation(database, schema, identifier)
+
     def check_schema_exists(self, database, schema):
         results = self.execute_macro(LIST_SCHEMAS_MACRO_NAME, kwargs={"database": database})
 
