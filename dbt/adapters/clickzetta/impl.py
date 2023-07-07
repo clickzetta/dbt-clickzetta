@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from typing import Mapping, Any, Optional, List, Union, Dict
+from typing import Mapping, Any, Optional, List, Union, Dict, Set
+from concurrent.futures import Future
 
 import agate
 import dbt.exceptions
@@ -10,6 +11,7 @@ from dbt.adapters.sql.impl import (
     LIST_SCHEMAS_MACRO_NAME,
     LIST_RELATIONS_MACRO_NAME,
 )
+from dbt.adapters.base.impl import catch_as_completed, ConstraintSupport
 
 from dbt.adapters.clickzetta import ClickZettaConnectionManager
 from dbt.adapters.clickzetta import ClickZettaRelation
@@ -18,7 +20,7 @@ from dbt.contracts.graph.manifest import Manifest
 from dbt.contracts.graph.nodes import ConstraintType
 from dbt.contracts.relation import RelationType
 from dbt.exceptions import CompilationError, DbtDatabaseError, DbtRuntimeError
-from dbt.adapters.base import BaseRelation
+from dbt.adapters.base import BaseRelation, SchemaSearchMap
 from dbt.clients.agate_helper import DEFAULT_TYPE_TESTER
 from dbt.contracts.connection import AdapterResponse
 from dbt.contracts.graph.nodes import ConstraintType
@@ -38,6 +40,7 @@ TABLE_OR_VIEW_NOT_FOUND_MESSAGES = (
     "Table or view not found",
     "NoSuchTableException",
 )
+logger = AdapterLogger(__name__)
 
 
 @dataclass
@@ -68,6 +71,25 @@ class ClickZettaAdapter(SQLAdapter):
     def _catalog_filter_table(cls, table: agate.Table, manifest: Manifest) -> agate.Table:
         lowered = table.rename(column_names=[c.lower() for c in table.column_names])
         return super()._catalog_filter_table(lowered, manifest)
+
+    def _get_catalog_schemas(self, manifest: Manifest) -> SchemaSearchMap:
+        candidates = super()._get_catalog_schemas(manifest)
+        db_schemas: Dict[str, Set[str]] = {}
+        result = SchemaSearchMap()
+
+        for candidate, schemas in candidates.items():
+            database = candidate.database
+            if database not in db_schemas:
+                db_schemas[database] = set(self.list_schemas(database))  # type: ignore[index]
+            if candidate.schema in db_schemas[database]:  # type: ignore[index]
+                result[candidate] = schemas
+            else:
+                logger.debug(
+                    "Skipping catalog for {}.{} - schema does not exist".format(
+                        database, candidate.schema
+                    )
+                )
+        return result
 
     @classmethod
     def convert_text_type(cls, agate_table, col_idx):
