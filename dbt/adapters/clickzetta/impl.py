@@ -178,9 +178,9 @@ class ClickZettaAdapter(SQLAdapter):
         for row in results:
             _schema, _identifier, _is_view, _is_materialized_view = row
             try:
-                if _is_view == 'true':
+                if _is_view:
                     _type = RelationType.View
-                elif _is_materialized_view == 'true':
+                elif _is_materialized_view:
                     _type = RelationType.MaterializedView
                 else:
                     _type = RelationType.Table
