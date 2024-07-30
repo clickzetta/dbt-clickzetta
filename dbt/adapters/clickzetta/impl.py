@@ -176,12 +176,14 @@ class ClickZettaAdapter(SQLAdapter):
         relations = []
         quote_policy = {"database": False, "schema": True, "identifier": True}
         for row in results:
-            _schema, _identifier, _is_view, _is_materialized_view = row
+            _schema, _identifier, _is_view, _is_materialized_view, _, _is_dynamic = row
             try:
                 if _is_view:
                     _type = RelationType.View
                 elif _is_materialized_view:
                     _type = RelationType.MaterializedView
+                elif _is_dynamic:
+                    _type = self.Relation.DynamicTable
                 else:
                     _type = RelationType.Table
             except ValueError:

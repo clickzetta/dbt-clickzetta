@@ -55,7 +55,7 @@ setup(
     include_package_data=True,
     install_requires=[
         "dbt-core~={}".format(dbt_core_version),
-            "clickzetta-connector~=0.8.34",
+        "clickzetta-connector-python[all]==0.8.78",
     ],
     zip_safe=False,
     classifiers=[

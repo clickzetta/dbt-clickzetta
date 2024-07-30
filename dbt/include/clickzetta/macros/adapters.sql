@@ -171,6 +171,34 @@
   {%- endif -%}
 {%- endmacro -%}
 
+{% macro clickzetta__create_dynamic_table_as(relation, sql) -%}
+  {% set target_lag = config.get('target_lag') %}
+  create or replace dynamic table {{ relation }}
+    {% if target_lag is not none %}
+      TARGET_LAG target_lag
+    {% endif %}
+    {{ refresh_vc() }}
+    {{ partition_cols(label="partitioned by") }}
+    {{ clustered_cols(label="clustered by") }}
+    {{ refresh_interval() }}
+    as
+    {{ sql }}
+{%- endmacro %}
+
+{% macro clickzetta__replace_dynamic_table_as(relation, sql) %}
+  {% set target_lag = config.get('target_lag') %}
+  create or replace dynamic table {{ relation }}
+    {% if target_lag is not none %}
+      TARGET_LAG target_lag
+    {% endif %}
+    {{ refresh_vc() }}
+    {{ partition_cols(label="partitioned by") }}
+    {{ clustered_cols(label="clustered by") }}
+    {{ refresh_interval() }}
+    as
+    {{ sql }}
+{% endmacro %}
+
 {% macro alter_table_add_constraints(relation, constraints) %}
   {{ return(adapter.dispatch('alter_table_add_constraints', 'dbt')(relation, constraints)) }}
 {% endmacro %}
@@ -383,4 +411,28 @@
 
 {%- macro clickzetta__information_schema(relation) -%}
   SYS.INFORMATION_SCHEMA
+{%- endmacro -%}
+
+
+{%- macro refresh_interval() -%}
+  {% set refresh_interval = config.get('refresh_interval') %}
+  {% if refresh_interval is not none %}
+    refresh interval {{refresh_interval}}
+  {% endif %}
+{%- endmacro -%}
+
+{%- macro refresh_vc() -%}
+  {% set refresh_vc = config.get('refresh_vc') %}
+  {% if refresh_vc is not none %}
+    PROPERTIES('refresh_vc'='{{refresh_vc}}')
+  {% endif %}
+{%- endmacro -%}
+
+{%- macro dynamic_table_initialize() -%}
+  {% set initialize = config.get('initialize') %}
+  {% if initialize is none %}
+    INITIALIZE = ON_SCHEDULE
+  {% else %}
+    INITIALIZE = initialize
+  {% endif %}
 {%- endmacro -%}
