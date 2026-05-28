@@ -9,24 +9,22 @@ from time import sleep
 from typing import Optional, Tuple, Union, Any, List
 
 import agate
-import dbt.clients.agate_helper
+import dbt_common.clients.agate_helper
 from clickzetta.dbapi.connection import Connection as ClickZettaConnection
 from clickzetta.client import Client
 
 from dbt.exceptions import (
     DbtInternalError,
     DbtRuntimeError,
-    FailedToConnectError,
-    DbtDatabaseError,
     DbtProfileError,
 )
-from dbt.adapters.base import Credentials  # type: ignore
-from dbt.contracts.connection import AdapterResponse, Connection
+from dbt.adapters.exceptions.connection import FailedToConnectError
+from dbt.adapters.contracts.connection import AdapterResponse, Connection, Credentials
 from dbt.adapters.sql import SQLConnectionManager  # type: ignore
-from dbt.events import AdapterLogger  # type: ignore
-from dbt.events.functions import warn_or_error
-from dbt.events.types import AdapterEventWarning
-from dbt.ui import line_wrap_message, warning_tag
+from dbt.adapters.events.logging import AdapterLogger
+from dbt.adapters.events.types import AdapterEventWarning
+from dbt_common.events.functions import warn_or_error
+from dbt_common.ui import line_wrap_message, warning_tag
 
 logger = AdapterLogger("ClickZetta")
 ROW_VALUE_REGEX = re.compile(r"Row Values: \[.*\]")
@@ -181,7 +179,7 @@ class ClickZettaConnectionManager(SQLConnectionManager):
         if fetch:
             table = self.get_result_from_cursor(cursor)
         else:
-            table = dbt.clients.agate_helper.empty_table()
+            table = dbt_common.clients.agate_helper.empty_table()
         return response, table
 
     def add_standard_query(self, sql: str, **kwargs) -> Tuple[Connection, Any]:

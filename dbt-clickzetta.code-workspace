@@ -1,0 +1,22 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../../GitHub/dbt-core"
+		},
+		{
+			"path": "../../GitHub/dbt-bigquery"
+		},
+		{
+			"path": "../../GitHub/dbt-redshift"
+		},
+		{
+			"path": "../../GitHub/dbt-snowflake"
+		},
+		{
+			"path": "../../GitHub/dbt-spark"
+		}
+	]
+}

@@ -2,9 +2,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, Type
 
-from dbt.adapters.base.relation import BaseRelation, Policy
+from dbt.adapters.base.relation import BaseRelation, Policy, classproperty
 from dbt.exceptions import DbtRuntimeError
-from dbt.utils import classproperty
 from mashumaro.types import SerializableType
 
 

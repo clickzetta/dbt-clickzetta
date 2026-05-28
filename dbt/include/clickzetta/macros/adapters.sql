@@ -173,9 +173,9 @@
 
 {% macro clickzetta__create_dynamic_table_as(relation, sql) -%}
   {% set target_lag = config.get('target_lag') %}
-  create or replace dynamic table {{ relation }}
+  create dynamic table {{ relation }}
     {% if target_lag is not none %}
-      TARGET_LAG target_lag
+      TARGET_LAG '{{ target_lag }}'
     {% endif %}
     {{ refresh_vc() }}
     {{ partition_cols(label="partitioned by") }}
@@ -189,7 +189,7 @@
   {% set target_lag = config.get('target_lag') %}
   create or replace dynamic table {{ relation }}
     {% if target_lag is not none %}
-      TARGET_LAG target_lag
+      TARGET_LAG '{{ target_lag }}'
     {% endif %}
     {{ refresh_vc() }}
     {{ partition_cols(label="partitioned by") }}
@@ -433,6 +433,6 @@
   {% if initialize is none %}
     INITIALIZE = ON_SCHEDULE
   {% else %}
-    INITIALIZE = initialize
+    INITIALIZE = {{ initialize }}
   {% endif %}
 {%- endmacro -%}

@@ -7,7 +7,7 @@ from jinja2 import Environment, FileSystemLoader
 
 class TestClickZettaMacros(unittest.TestCase):
     def setUp(self):
-        project_path = os.path.abspath(os.path.join(os.getcwd(), "../.."))
+        project_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
         self.jinja_env = Environment(
             loader=FileSystemLoader(project_path + "/dbt/include/clickzetta/macros"),
             extensions=[

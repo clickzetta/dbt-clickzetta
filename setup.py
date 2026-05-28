@@ -39,8 +39,7 @@ def _get_dbt_core_version():
     pre = parts["prekind"] + "1" if parts["prekind"] else ""
     return f"{minor}{pre}"
 package_name = "dbt-clickzetta"
-package_version = "0.2.32"
-dbt_core_version = _get_dbt_core_version()
+package_version = "1.8.0"
 description = """The ClickZetta adapter plugin for dbt"""
 setup(
     name=package_name,
@@ -54,8 +53,8 @@ setup(
     packages=find_namespace_packages(include=["dbt", "dbt.*"]),
     include_package_data=True,
     install_requires=[
-        "dbt-core~={}".format(dbt_core_version),
-        "clickzetta-connector-python[all]==0.8.78",
+        "dbt-core>=1.8.0,<2.0.0",
+        "clickzetta-connector>=1.0.0",
     ],
     zip_safe=False,
     classifiers=[
@@ -63,11 +62,11 @@ setup(
         "Operating System :: Microsoft :: Windows",
         "Operating System :: MacOS :: MacOS X",
         "Operating System :: POSIX :: Linux",
-        "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
     ],
-    python_requires=">=3.7",
+    python_requires=">=3.8",
 )

@@ -3,8 +3,9 @@ from typing import Any, Dict, Optional, TypeVar, Union
 
 from dbt.adapters.base.column import Column
 from dbt.exceptions import DbtRuntimeError
-from hologram import JsonDict
-from dbt.dataclass_schema import dbtClassMixin
+from dbt_common.dataclass_schema import dbtClassMixin
+
+JsonDict = Dict[str, Any]
 
 
 @dataclass

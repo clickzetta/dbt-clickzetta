@@ -18,15 +18,12 @@ from dbt.adapters.clickzetta import ClickZettaRelation
 from dbt.adapters.clickzetta import ClickZettaColumn
 from dbt.contracts.graph.manifest import Manifest
 from dbt.contracts.graph.nodes import ConstraintType
-from dbt.contracts.relation import RelationType
-from dbt.exceptions import CompilationError, DbtDatabaseError, DbtRuntimeError
-from dbt.adapters.base import BaseRelation, SchemaSearchMap
-from dbt.clients.agate_helper import DEFAULT_TYPE_TESTER
-from dbt.contracts.connection import AdapterResponse
-from dbt.contracts.graph.nodes import ConstraintType
-from dbt.contracts.relation import RelationType
-from dbt.events import AdapterLogger
-from dbt.utils import executor, AttrDict
+from dbt.adapters.base import BaseRelation, SchemaSearchMap, RelationType
+from dbt.exceptions import CompilationError, DbtRuntimeError
+from dbt_common.clients.agate_helper import DEFAULT_TYPE_TESTER
+from dbt.adapters.contracts.connection import AdapterResponse
+from dbt.adapters.events.logging import AdapterLogger
+from dbt_common.utils import AttrDict
 
 GET_COLUMNS_IN_RELATION_RAW_MACRO_NAME = "get_columns_in_relation_raw"
 LIST_SCHEMAS_MACRO_NAME = "list_schemas"
@@ -168,7 +165,7 @@ class ClickZettaAdapter(SQLAdapter):
         kwargs = {"schema_relation": schema_relation}
         try:
             results = self.execute_macro(LIST_RELATIONS_MACRO_NAME, kwargs=kwargs)
-        except DbtDatabaseError as exc:
+        except DbtRuntimeError as exc:
             if "Object does not exist" in str(exc):
                 return []
             raise
