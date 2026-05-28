@@ -36,45 +36,19 @@ class TestClickZettaAdapter(unittest.TestCase):
                 "outputs": {
                     "test": {
                         "type": "clickzetta",
-                        "service": "dev-api.zettadecision.com",
-                        "workspace": "system_smoke",
-                        "instance": "clickzetta",
-                        "vcluster": "cz_gp_daily",
-                        "username": "cz_lh_smoke_test",
+                        "service": "cn-shanghai-alicloud.api.clickzetta.com",
+                        "workspace": "test_workspace",
+                        "instance": "test_instance",
+                        "vcluster": "default_ap",
+                        "username": "test_user",
                         "schema": "dbt",
-                        "password": "Abc123456",
+                        "password": "test_password",
                         "split_size": 8 * 1024 * 1024,
                     }
                 },
                 "target": "test",
             },
         )
-
-    def test_http_connection(self):
-        config = self._get_target_http(self.project_cfg)
-        adapter = ClickZettaAdapter(config, MP_CONTEXT)
-
-        connection = adapter.acquire_connection("dummy")
-        connection.handle  # trigger lazy-load
-
-
-        self.assertEqual(connection.state, "open")
-        self.assertIsNotNone(connection.handle)
-        self.assertEqual(connection.credentials.workspace, "system_smoke")
-        self.assertEqual(connection.credentials.instance, "clickzetta")
-        self.assertEqual(connection.credentials.vcluster, "cz_gp_daily")
-        self.assertEqual(connection.credentials.password, "Abc123456")
-        self.assertEqual(connection.credentials.service, "dev-api.zettadecision.com")
-        self.assertEqual(connection.credentials.username, "cz_lh_smoke_test")
-        self.assertEqual(connection.credentials.schema, "dbt")
-        self.assertEqual(connection.credentials.database, "system_smoke")
-        self.assertEqual(connection.credentials.split_size, 8 * 1024 * 1024)
-        sql = """/* this is a comment */
-            show create table _airbyte_raw_airbyte_write_test"""
-
-        res, table = adapter.connections.execute(sql=sql, auto_begin=True, fetch=True)
-        print(table.rows)
-
 
     def test_parse_relation(self):
         self.maxDiff = None
