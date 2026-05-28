@@ -1,5 +1,6 @@
 import unittest
 from unittest import mock
+import multiprocessing
 
 import dbt.flags as flags
 from dbt.exceptions import DbtRuntimeError
@@ -7,6 +8,8 @@ from agate import Row
 from dbt.adapters.clickzetta import ClickZettaAdapter, ClickZettaRelation
 from .utils import config_from_parts_or_dicts
 import sqlparse
+
+MP_CONTEXT = multiprocessing.get_context("spawn")
 
 
 class TestClickZettaAdapter(unittest.TestCase):
@@ -49,7 +52,7 @@ class TestClickZettaAdapter(unittest.TestCase):
 
     def test_http_connection(self):
         config = self._get_target_http(self.project_cfg)
-        adapter = ClickZettaAdapter(config)
+        adapter = ClickZettaAdapter(config, MP_CONTEXT)
 
         connection = adapter.acquire_connection("dummy")
         connection.handle  # trigger lazy-load
@@ -102,7 +105,7 @@ class TestClickZettaAdapter(unittest.TestCase):
         input_cols = [Row(keys=["col_name", "data_type"], values=r) for r in plain_rows]
 
         config = self._get_target_http(self.project_cfg)
-        rows = ClickZettaAdapter(config).parse_describe_extended(relation, input_cols)
+        rows = ClickZettaAdapter(config, MP_CONTEXT).parse_describe_extended(relation, input_cols)
         self.assertEqual(len(rows), 11)
         self.assertEqual(
             rows[0].to_column_dict(omit_none=False),
@@ -176,7 +179,7 @@ class TestClickZettaAdapter(unittest.TestCase):
 
     def test_relation_with_database(self):
         config = self._get_target_http(self.project_cfg)
-        adapter = ClickZettaAdapter(config)
+        adapter = ClickZettaAdapter(config, MP_CONTEXT)
         # fine
         adapter.Relation.create(schema="dbt", identifier="dbt_table_1")
         with self.assertRaises(DbtRuntimeError):

@@ -118,14 +118,14 @@ class ClickZettaAdapter(SQLAdapter):
         # Convert the Row to a dict
         dict_rows = [dict(zip(row._keys, row._values)) for row in raw_rows]
 
-        rows = [row for row in dict_rows if not row["column_name"].startswith("#")]
+        rows = [row for row in dict_rows if not row["col_name"].startswith("#")]
 
         return [
             ClickZettaColumn(
                 table_database=None,
                 table_schema=relation.schema,
                 table_name=relation.name,
-                column=column["column_name"],
+                column=column["col_name"],
                 dtype=column["data_type"],
             )
             for idx, column in enumerate(rows)

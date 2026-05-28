@@ -49,9 +49,9 @@ class ClickZettaRelation(BaseRelation):
     include_policy: Policy = field(default_factory=lambda: ClickZettaIncludePolicy())
     quote_character: str = "`"
 
-    # def __post_init__(self):
-    #     if self.database != self.schema and self.database:
-    #         raise DbtRuntimeError("Cannot set database in clickzetta!")
+    def __post_init__(self):
+        if self.database and self.database != self.schema:
+            raise DbtRuntimeError("Cannot set database in clickzetta!")
 
     def render(self):
         return super().render()
