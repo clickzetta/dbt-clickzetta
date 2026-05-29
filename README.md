@@ -169,23 +169,6 @@ select * from {{ source('raw', 'orders') }}
 {% endsnapshot %}
 ```
 
-## Known Limitations
-
-### Table Stream: enumerate columns explicitly for clarity
-
-`SELECT *` from a Table Stream works and returns both user columns and system columns (`__change_type`, `__commit_timestamp`, `__commit_version`). System column names do not require backtick quoting.
-
-For production CDC pipelines, explicitly listing columns is recommended to avoid unexpected schema changes:
-
-```sql
-select
-    col1, col2, col3,
-    __change_type,
-    __commit_timestamp,
-    __commit_version
-from my_schema.my_table_stream
-```
-
 ## Connection Parameters
 
 | Parameter | Required | Description |
