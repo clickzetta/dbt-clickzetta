@@ -91,8 +91,16 @@ class ClickZettaAdapter(SQLAdapter):
     def get_catalog(self, relation_configs, used_schemas):
         """Build catalog using SHOW TABLES + DESCRIBE TABLE (INFORMATION_SCHEMA not available)."""
         catalog_rows = []
+        # used_schemas may contain (None, schema) and (workspace, schema) for the same schema.
+        # Collect all unique schemas with their associated databases.
+        schema_databases: Dict[str, Set[Optional[str]]] = {}
+        for database, schema in used_schemas:
+            if schema not in schema_databases:
+                schema_databases[schema] = set()
+            schema_databases[schema].add(database)
+
         with self.connection_named("catalog"):
-            for database, schema in used_schemas:
+            for schema, databases in schema_databases.items():
                 try:
                     _, tables_table = self.execute(f"SHOW TABLES IN {schema}", fetch=True)
                     for tbl_row in tables_table.rows:
@@ -102,29 +110,32 @@ class ClickZettaAdapter(SQLAdapter):
                             _, desc_table = self.execute(
                                 f"DESCRIBE TABLE {schema}.{tbl_name}", fetch=True
                             )
-                            for idx, col_row in enumerate(desc_table.rows):
-                                catalog_rows.append({
-                                    "table_database": None,
-                                    "table_schema": schema,
-                                    "table_name": tbl_name,
-                                    "table_type": tbl_type,
-                                    "column_name": col_row["column_name"],
-                                    "column_index": idx,
-                                    "column_type": col_row["data_type"],
-                                    "column_comment": col_row.get("comment", ""),
-                                    "stats:row_count:label": None,
-                                    "stats:row_count:value": None,
-                                    "stats:row_count:description": None,
-                                    "stats:row_count:include": False,
-                                    "stats:bytes:label": None,
-                                    "stats:bytes:value": None,
-                                    "stats:bytes:description": None,
-                                    "stats:bytes:include": False,
-                                    "stats:last_modified:label": None,
-                                    "stats:last_modified:value": None,
-                                    "stats:last_modified:description": None,
-                                    "stats:last_modified:include": False,
-                                })
+                            # Emit one row per database entry so both nodes (database=None)
+                            # and sources (database=workspace) can match the catalog.
+                            for database in databases:
+                                for idx, col_row in enumerate(desc_table.rows):
+                                    catalog_rows.append({
+                                        "table_database": database,
+                                        "table_schema": schema,
+                                        "table_name": tbl_name,
+                                        "table_type": tbl_type,
+                                        "column_name": col_row["column_name"],
+                                        "column_index": idx,
+                                        "column_type": col_row["data_type"],
+                                        "column_comment": col_row.get("comment", ""),
+                                        "stats:row_count:label": None,
+                                        "stats:row_count:value": None,
+                                        "stats:row_count:description": None,
+                                        "stats:row_count:include": False,
+                                        "stats:bytes:label": None,
+                                        "stats:bytes:value": None,
+                                        "stats:bytes:description": None,
+                                        "stats:bytes:include": False,
+                                        "stats:last_modified:label": None,
+                                        "stats:last_modified:value": None,
+                                        "stats:last_modified:description": None,
+                                        "stats:last_modified:include": False,
+                                    })
                         except Exception as e:
                             logger.debug(f"Could not describe {schema}.{tbl_name}: {e}")
                 except Exception as e:

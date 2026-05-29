@@ -38,6 +38,8 @@ class StrEnum(str, SerializableType, Enum):
 class ClickZettaRelationType(StrEnum):
     Table = "table"
     View = "view"
+    CTE = "cte"
+    External = "external"
     MaterializedView = "materializedview"
     DynamicTable = "dynamic_table"
 
