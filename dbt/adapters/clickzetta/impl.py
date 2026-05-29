@@ -169,12 +169,25 @@ class ClickZettaAdapter(SQLAdapter):
         return "string"
 
     @classmethod
+    def convert_number_type(cls, agate_table, col_idx):
+        decimals = agate_table.aggregate(agate.MaxPrecision(col_idx))
+        return "double" if decimals else "bigint"
+
+    @classmethod
+    def convert_integer_type(cls, agate_table, col_idx):
+        return "bigint"
+
+    @classmethod
+    def convert_boolean_type(cls, agate_table, col_idx):
+        return "boolean"
+
+    @classmethod
     def convert_date_type(cls, agate_table, col_idx):
         return "date"
 
     @classmethod
     def convert_time_type(cls, agate_table, col_idx):
-        return "time"
+        return "timestamp_ntz"
 
     @classmethod
     def convert_datetime_type(cls, agate_table, col_idx):

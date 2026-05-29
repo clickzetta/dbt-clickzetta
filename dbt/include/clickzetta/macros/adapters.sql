@@ -1,3 +1,11 @@
+{# ------- UNIT TEST FIXTURE ------- #}
+
+{# ClickZetta does not support `cast(null as string not null)` — strip the not null constraint #}
+{% macro clickzetta__safe_cast(field, type) %}
+    {%- set clean_type = type | replace(' not null', '') | replace(' NOT NULL', '') | trim -%}
+    cast({{ field }} as {{ clean_type }})
+{% endmacro %}
+
 {# ------- GRANTS ------- #}
 
 {% macro clickzetta__copy_grants() %}
