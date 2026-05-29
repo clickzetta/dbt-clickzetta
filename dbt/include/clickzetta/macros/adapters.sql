@@ -435,33 +435,26 @@
 
 {% macro clickzetta__alter_relation_add_remove_columns(relation, add_columns, remove_columns) %}
 
+  {#-- Lakehouse supports both ADD COLUMNS and DROP COLUMN --#}
+
   {% if remove_columns %}
-    {% if relation.is_delta %}
-      {% set platform_name = 'Delta Lake' %}
-    {% elif relation.is_iceberg %}
-      {% set platform_name = 'Iceberg' %}
-    {% else %}
-      {% set platform_name = 'clickzetta' %}
-    {% endif %}
-    {{ exceptions.raise_compiler_error(platform_name + ' does not support dropping columns from tables') }}
+    {% for column in remove_columns %}
+      {% call statement('remove_column_' ~ loop.index) %}
+        alter table {{ relation }} drop column {{ column.name }}
+      {% endcall %}
+    {% endfor %}
   {% endif %}
 
-  {% if add_columns is none %}
-    {% set add_columns = [] %}
+  {% if add_columns and add_columns | length > 0 %}
+    {% call statement('add_columns') %}
+      alter {{ relation.type }} {{ relation }}
+      add columns (
+        {% for column in add_columns %}
+          {{ column.name }} {{ column.data_type }}{{ ',' if not loop.last }}
+        {% endfor %}
+      )
+    {% endcall %}
   {% endif %}
-
-  {% set sql -%}
-
-     alter {{ relation.type }} {{ relation }}
-
-       {% if add_columns %} add columns {% endif %}
-            {% for column in add_columns %}
-               {{ column.name }} {{ column.data_type }}{{ ',' if not loop.last }}
-            {% endfor %}
-
-  {%- endset -%}
-
-  {% do run_query(sql) %}
 
 {% endmacro %}
 

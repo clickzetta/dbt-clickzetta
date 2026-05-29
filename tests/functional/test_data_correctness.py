@@ -542,3 +542,214 @@ class TestPartitionedTableCorrectness:
         # total rows = 5
         n = project.run_sql(f"select count(*) from {relation}", fetch="one")[0]
         assert int(n) == 5, f"expected 5 total rows, got {n}"
+
+
+# ── 7. dateadd / datediff macro 正确性 ───────────────────────────────────────
+
+_date_model_sql = """
+{{ config(materialized='table') }}
+select
+    -- dateadd: DATE input
+    {{ dateadd('day', 7, "DATE '2024-01-15'") }}           as add_7_days,
+    {{ dateadd('month', 2, "DATE '2024-01-15'") }}         as add_2_months,
+    {{ dateadd('year', 1, "DATE '2024-01-15'") }}          as add_1_year,
+    -- dateadd: TIMESTAMP input
+    {{ dateadd('hour', 3, "TIMESTAMP '2024-01-15 10:00:00'") }}   as add_3_hours,
+    {{ dateadd('minute', 90, "TIMESTAMP '2024-01-15 10:00:00'") }} as add_90_min,
+    -- datediff
+    {{ datediff("DATE '2024-01-15'", "DATE '2024-01-22'", 'day') }}   as diff_7_days,
+    {{ datediff("DATE '2024-01-15'", "DATE '2024-03-15'", 'month') }} as diff_2_months,
+    {{ datediff("TIMESTAMP '2024-01-15 10:00:00'", "TIMESTAMP '2024-01-15 13:30:00'", 'hour') }} as diff_3_hours,
+    {{ datediff("TIMESTAMP '2024-01-15 10:00:00'", "TIMESTAMP '2024-01-15 10:45:00'", 'minute') }} as diff_45_min
+"""
+
+
+class TestDateMacroCorrectness:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"date_ops.sql": _date_model_sql}
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"name": "date_macro_correctness"}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def clean_up(self, project):
+        yield
+        with project.adapter.connection_named("__test"):
+            relation = project.adapter.Relation.create(
+                database=project.database, schema=project.test_schema
+            )
+            project.adapter.drop_schema(relation)
+
+    def test_date_macros(self, project):
+        run_dbt(["run"])
+        relation = relation_from_name(project.adapter, "date_ops")
+        row = project.run_sql(f"select * from {relation}", fetch="one")
+
+        add_7_days, add_2_months, add_1_year, add_3_hours, add_90_min, \
+            diff_7_days, diff_2_months, diff_3_hours, diff_45_min = row
+
+        # dateadd results (date part only for date inputs)
+        assert str(add_7_days)[:10] == "2024-01-22", f"add 7 days: {add_7_days}"
+        assert str(add_2_months)[:10] == "2024-03-15", f"add 2 months: {add_2_months}"
+        assert str(add_1_year)[:10] == "2025-01-15", f"add 1 year: {add_1_year}"
+        assert str(add_3_hours)[11:13] == "13", f"add 3 hours: {add_3_hours}"
+        assert str(add_90_min)[11:16] == "11:30", f"add 90 min: {add_90_min}"
+
+        # datediff results
+        assert int(diff_7_days) == 7, f"diff 7 days: {diff_7_days}"
+        assert int(diff_2_months) == 2, f"diff 2 months: {diff_2_months}"
+        assert int(diff_3_hours) == 3, f"diff 3 hours: {diff_3_hours}"
+        assert int(diff_45_min) == 45, f"diff 45 min: {diff_45_min}"
+
+
+# ── 8. on_schema_change=sync_all_columns 增删列 ──────────────────────────────
+
+_schema_change_model_sql = """
+{{ config(
+    materialized='incremental',
+    incremental_strategy='merge',
+    unique_key='id',
+    on_schema_change='sync_all_columns'
+) }}
+{% if var('with_score', false) %}
+select id, name, score from {{ source('raw', 'sc_data') }}
+{% else %}
+select id, name from {{ source('raw', 'sc_data') }}
+{% endif %}
+"""
+
+_sc_seed_v1_csv = """id,name,score
+1,Alice,90
+2,Bob,80
+"""
+
+_sc_schema_yml = """
+version: 2
+sources:
+  - name: raw
+    schema: "{{ target.schema }}"
+    tables:
+      - name: sc_data
+        identifier: seed_sc
+"""
+
+
+class TestSchemaChangeCorrectness:
+    @pytest.fixture(scope="class")
+    def seeds(self):
+        return {"seed_sc.csv": _sc_seed_v1_csv}
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"sc_model.sql": _schema_change_model_sql, "schema.yml": _sc_schema_yml}
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"name": "schema_change_correctness"}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def clean_up(self, project):
+        yield
+        with project.adapter.connection_named("__test"):
+            relation = project.adapter.Relation.create(
+                database=project.database, schema=project.test_schema
+            )
+            project.adapter.drop_schema(relation)
+
+    def test_add_column(self, project):
+        """sync_all_columns: 新增列后增量运行，新列被加入目标表"""
+        run_dbt(["seed"])
+
+        # 第一次 run：without_score=false，只有 id, name
+        run_dbt(["run", "--vars", "with_score: false"])
+        relation = relation_from_name(project.adapter, "sc_model")
+        n = project.run_sql(f"select count(*) from {relation}", fetch="one")[0]
+        assert int(n) == 2, f"expected 2 rows after first run, got {n}"
+
+        # 第二次 run：with_score=true，model 加了 score 列
+        # sync_all_columns 应该自动 ADD COLUMN score 到目标表
+        run_dbt(["run", "--vars", "with_score: true"])
+
+        # 验证 score 列存在且有值
+        score = project.run_sql(
+            f"select score from {relation} where id = 1", fetch="one"
+        )[0]
+        assert int(score) == 90, f"expected score=90 for id=1, got {score}"
+
+
+# ── 9. incremental_predicates 在 insert_overwrite 下生效 ─────────────────────
+
+_predicate_model_sql = """
+{{ config(
+    materialized='incremental',
+    incremental_strategy='insert_overwrite',
+    partition_by=['region'],
+    incremental_predicates=["region = 'north'"]
+) }}
+select id, name, amount, region
+from {{ source('raw', 'pred_data') }}
+"""
+
+_pred_seed_csv = """id,name,amount,region
+1,A,100,north
+2,B,200,north
+3,C,150,south
+"""
+
+_pred_schema_yml = """
+version: 2
+sources:
+  - name: raw
+    schema: "{{ target.schema }}"
+    tables:
+      - name: pred_data
+        identifier: seed_pred
+"""
+
+
+class TestIncrementalPredicatesCorrectness:
+    @pytest.fixture(scope="class")
+    def seeds(self):
+        return {"seed_pred.csv": _pred_seed_csv}
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"pred_model.sql": _predicate_model_sql, "schema.yml": _pred_schema_yml}
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"name": "predicate_correctness"}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def clean_up(self, project):
+        yield
+        with project.adapter.connection_named("__test"):
+            relation = project.adapter.Relation.create(
+                database=project.database, schema=project.test_schema
+            )
+            project.adapter.drop_schema(relation)
+
+    def test_predicates_filter_source(self, project):
+        """incremental_predicates 在第二次增量运行时过滤 source 数据"""
+        run_dbt(["seed"])
+
+        # 第一次 run：全量加载（existing_relation is none，不走 insert_overwrite）
+        run_dbt(["run"])
+        relation = relation_from_name(project.adapter, "pred_model")
+        n = project.run_sql(f"select count(*) from {relation}", fetch="one")[0]
+        assert int(n) == 3, f"expected 3 rows after first run (full load), got {n}"
+
+        # 第二次 run：增量运行，predicates 过滤 source，只写入 north 分区
+        run_dbt(["run"])
+        n = project.run_sql(f"select count(*) from {relation}", fetch="one")[0]
+        # insert_overwrite with predicate region='north': 只覆盖 north 分区
+        # south 分区保留，north 分区被 2 行覆盖 → 总计 3 行（north 2 + south 1）
+        assert int(n) == 3, f"expected 3 rows after second run (north overwritten, south kept), got {n}"
+
+        # 验证 north 分区数据是最新的（仍然是 2 行）
+        north_count = project.run_sql(
+            f"select count(*) from {relation} where region = 'north'", fetch="one"
+        )[0]
+        assert int(north_count) == 2, f"expected 2 north rows, got {north_count}"
