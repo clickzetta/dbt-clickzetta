@@ -1,0 +1,6 @@
+customer_id,name,email,phone,city,updated_at
+C001,Alice Wang,alice@example.com,13800001111,Shanghai,2024-01-01 00:00:00
+C002,Bob Li,bob@example.com,13800002222,Beijing,2024-01-01 00:00:00
+C003,Charlie Zhang,charlie@example.com,13800003333,Guangzhou,2024-01-01 00:00:00
+C004,Diana Chen,diana@example.com,13800004444,Shenzhen,2024-01-01 00:00:00
+C005,Eve Liu,eve@example.com,13800005555,Hangzhou,2024-01-01 00:00:00

@@ -1,0 +1,9 @@
+event_id,user_id,event_type,event_time,page
+E001,C001,page_view,2024-01-05 10:00:00,home
+E002,C001,click,2024-01-05 10:01:00,product
+E003,C002,page_view,2024-01-05 10:05:00,home
+E004,C003,purchase,2024-01-05 10:10:00,checkout
+E005,C002,click,2024-01-05 10:12:00,product
+E006,C004,page_view,2024-01-05 10:15:00,category
+E007,C001,purchase,2024-01-05 10:20:00,checkout
+E008,C005,page_view,2024-01-05 10:25:00,home

@@ -1,0 +1,26 @@
+name: clickzetta_example
+version: '1.0.0'
+config-version: 2
+
+profile: clickzetta_example
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+snapshot-paths: ["snapshots"]
+analysis-paths: ["analyses"]
+
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  clickzetta_example:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table
+    advanced:
+      +materialized: table
+
+seeds:
+  clickzetta_example:
+    +schema: raw
