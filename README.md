@@ -139,6 +139,31 @@ dbt run-operation drop_object --args '{relation: my_schema.my_table, type: table
 dbt run-operation refresh_dynamic_table --args '{model_name: my_dynamic_table}'
 ```
 
+## Table Stream as Source
+
+Declare a Table Stream in `sources.yml` and reference it via `source()`. The stream appends three system columns to every row: `__change_type`, `__commit_version`, `__commit_timestamp`.
+
+```yaml
+# sources.yml
+sources:
+  - name: my_streams
+    schema: my_schema
+    tables:
+      - name: orders_stream
+```
+
+```sql
+-- Option 1: explicit columns (production-safe)
+select __change_type, __commit_timestamp, order_id, amount
+from {{ source('my_streams', 'orders_stream') }}
+
+-- Option 2: SELECT * EXCEPT — returns only user columns, no hardcoded list
+select * except(__change_type, __commit_timestamp, __commit_version)
+from {{ source('my_streams', 'orders_stream') }}
+```
+
+> Note: `SELECT` does not advance the stream offset. Only DML statements (INSERT, MERGE, etc.) advance it.
+
 ## Dynamic Table
 
 ```sql

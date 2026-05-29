@@ -3,7 +3,10 @@ version: 2
 sources:
   - name: example_streams
     schema: example
-    description: "ClickZetta Table Stream 示例，用于 CDC 变更捕获"
+    description: "ClickZetta Table Stream sources for CDC change capture"
     tables:
       - name: orders_stream
-        description: "fct_orders_partitioned 的变更流，捕获 INSERT/UPDATE/DELETE"
+        description: >
+          Change stream on fct_orders_incremental. Captures INSERT/UPDATE/DELETE.
+          System columns appended to every row: __change_type, __commit_version, __commit_timestamp.
+          Use SELECT * EXCEPT(__change_type, __commit_timestamp, __commit_version) to read only user columns.
