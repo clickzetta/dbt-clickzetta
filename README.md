@@ -2,7 +2,7 @@
 
 The [dbt](https://www.getdbt.com/) adapter for [ClickZetta Lakehouse](https://www.yunqi.tech/).
 
-查看 **[examples/](./examples/)** 目录获取各功能的完整示例。
+See the **[examples/](./examples/)** directory for complete, runnable examples of all features.
 
 ## Installation
 
@@ -58,7 +58,7 @@ dbt docs generate
 | `materialized_view` materialization | ✅ |
 | `dbt test` (generic + singular) | ✅ |
 | `dbt seed` | ✅ |
-| `dbt docs generate` | ✅ (含行数、大小、最后修改时间) |
+| `dbt docs generate` | ✅ (row count, size, last modified) |
 | `dbt source freshness` | ✅ |
 | `persist_docs` (relation + columns) | ✅ |
 | Partitioned tables | ✅ |
@@ -66,10 +66,10 @@ dbt docs generate
 | Python models | ✅ |
 | `on_schema_change` | ✅ (append_new_columns, sync_all_columns) |
 | `grants` | ✅ |
-| `clone` materialization | ✅ (零拷贝克隆 + Time Travel 克隆) |
-| Indexes (Bloomfilter / Inverted / Vector) | ✅ (通过 `indexes` config 自动创建) |
-| Table Stream as source | ✅ (通过 `sources.yml` 声明，`source()` 引用) |
-| VCluster per-model 切换 | ✅ (通过 `vcluster` config) |
+| `clone` materialization | ✅ (zero-copy clone + Time Travel clone) |
+| Indexes (Bloomfilter / Inverted / Vector) | ✅ (auto-created via `indexes` config) |
+| Table Stream as source | ✅ (declare in `sources.yml`, reference via `source()`) |
+| VCluster per-model | ✅ (via `vcluster` config) |
 
 ## Incremental Strategies
 
@@ -90,7 +90,7 @@ dbt docs generate
 
 ## Indexes
 
-支持 Bloomfilter、Inverted、Vector 三种索引，建表后自动创建：
+Supports Bloomfilter, Inverted, and Vector index types. Indexes are created automatically after the table is built:
 
 ```sql
 {{ config(
@@ -105,37 +105,37 @@ dbt docs generate
 
 ## VCluster per-model
 
-为单个模型指定计算集群，实现大小模型资源隔离：
+Assign a specific VCluster to a model for compute resource isolation:
 
 ```sql
 {{ config(
     materialized='table',
-    vcluster='large_ap'   -- 该模型使用 large_ap 集群运行
+    vcluster='large_ap'   -- this model runs on the large_ap cluster
 ) }}
 ```
 
 ## Utility Macros
 
-通过 `dbt run-operation` 调用的运维宏：
+Run via `dbt run-operation`:
 
 ```bash
-# 小文件合并（高频增量写入后使用）
+# Compact small files (useful after high-frequency incremental writes)
 dbt run-operation optimize_table --args '{relation: my_schema.my_table}'
 dbt run-operation optimize_table --args '{relation: my_schema.my_table, where: "dt >= current_date() - interval 7 days"}'
 
-# 切换 VCluster
+# Switch VCluster for the current session
 dbt run-operation use_vcluster --args '{vcluster: large_ap}'
 
-# 查看可恢复的已删除对象
+# List recently dropped objects available for recovery
 dbt run-operation show_tables_history --args '{schema: my_schema}'
 
-# 恢复误删对象（支持普通表、动态表、物化视图、Table Stream）
+# Recover a dropped object (table, dynamic table, materialized view, or stream)
 dbt run-operation undrop --args '{relation: my_schema.my_table}'
 
-# 删除对象（type: table | view | dynamic_table | materialized_view | stream）
+# Drop an object (type: table | view | dynamic_table | materialized_view | stream)
 dbt run-operation drop_object --args '{relation: my_schema.my_table, type: table}'
 
-# 手动刷新动态表
+# Manually refresh a dynamic table
 dbt run-operation refresh_dynamic_table --args '{model_name: my_dynamic_table}'
 ```
 
@@ -182,7 +182,6 @@ select * from {{ source('raw', 'orders') }}
 | `schema` | ✅ | Default schema |
 | `vcluster` | ✅ | VCluster name, e.g. `default_ap` |
 | `connect_retries` | ❌ | Connection retry count (default: 3) |
-
 
 ## Development
 
