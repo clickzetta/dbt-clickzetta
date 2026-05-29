@@ -1,2 +1,0 @@
-insert into example.fct_orders_partitioned (order_id, customer_id, customer_name, city, amount, status, region, dt, updated_at)
-    select order_id, customer_id, customer_name, city, amount, status, region, dt, updated_at from example.fct_orders_partitioned__dbt_tmp
