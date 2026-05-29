@@ -40,7 +40,7 @@ class ClickZettaRelationType(StrEnum):
     View = "view"
     CTE = "cte"
     External = "external"
-    MaterializedView = "materializedview"
+    MaterializedView = "materialized_view"
     DynamicTable = "dynamic_table"
 
 

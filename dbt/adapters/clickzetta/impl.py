@@ -238,7 +238,7 @@ class ClickZettaAdapter(SQLAdapter):
                 if _is_view:
                     _type = RelationType.View
                 elif _is_materialized_view:
-                    _type = RelationType.MaterializedView
+                    _type = self.Relation.get_relation_type.MaterializedView
                 elif _is_dynamic:
                     _type = self.Relation.DynamicTable
                 else:
