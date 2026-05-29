@@ -202,7 +202,9 @@ class ClickZettaConnectionManager(SQLConnectionManager):
                 elif isinstance(binding, bool):
                     cast_bindings.append("true" if binding else "false")
                 else:
-                    cast_bindings.append(f"'{str(binding)}'")
+                    # Escape single quotes by doubling them (standard SQL escaping)
+                    escaped = str(binding).replace("'", "''")
+                    cast_bindings.append(f"'{escaped}'")
             sql = sql % tuple(cast_bindings)
             bindings = None
 
