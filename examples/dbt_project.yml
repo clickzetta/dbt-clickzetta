@@ -7,7 +7,7 @@ profile: clickzetta_example
 model-paths: ["models"]
 seed-paths: ["seeds"]
 snapshot-paths: ["snapshots"]
-analysis-paths: ["analyses"]
+test-paths: ["tests"]
 
 target-path: "target"
 clean-targets: ["target", "dbt_packages"]

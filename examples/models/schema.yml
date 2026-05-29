@@ -1,0 +1,79 @@
+version: 2
+
+models:
+  - name: stg_orders
+    description: "订单清洗视图，过滤掉 order_id 为空的行"
+    columns:
+      - name: order_id
+        tests:
+          - not_null
+          - unique
+      - name: customer_id
+        tests:
+          - not_null
+      - name: amount
+        tests:
+          - not_null
+      - name: status
+        tests:
+          - accepted_values:
+              values: ['completed', 'pending', 'cancelled']
+
+  - name: stg_customers
+    description: "客户清洗视图"
+    columns:
+      - name: customer_id
+        tests:
+          - not_null
+          - unique
+
+  - name: dim_customers
+    description: "客户汇总宽表：每个客户的订单数和总金额"
+    columns:
+      - name: customer_id
+        tests:
+          - not_null
+          - unique
+      - name: order_count
+        tests:
+          - not_null
+      - name: total_amount
+        tests:
+          - not_null
+
+  - name: fct_orders_incremental
+    description: "增量订单事实表（merge 策略）"
+    columns:
+      - name: order_id
+        tests:
+          - not_null
+          - unique
+
+  - name: fct_orders_partitioned
+    description: "按 dt 分区的订单宽表"
+    columns:
+      - name: order_id
+        tests:
+          - not_null
+          - unique
+
+  - name: daily_revenue
+    description: "按日期和区域汇总的营收（insert_overwrite 增量）"
+    columns:
+      - name: dt
+        tests:
+          - not_null
+      - name: region
+        tests:
+          - not_null
+      - name: revenue
+        tests:
+          - not_null
+
+  - name: regional_revenue_with_grants
+    description: "按区域汇总的营收，演示 grants 授权"
+    columns:
+      - name: region
+        tests:
+          - not_null
+          - unique
