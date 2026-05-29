@@ -144,12 +144,12 @@
     {%- if temporary -%}
       {{ create_temporary_view(relation, compiled_code) }}
     {%- else -%}
-        create table {{ relation }}
       {%- set contract_config = config.get('contract') -%}
       {%- if contract_config.enforced -%}
         {{ get_assert_columns_equivalent(compiled_code) }}
         {%- set compiled_code = get_select_subquery(compiled_code) %}
       {% endif %}
+      create table {{ relation }}
       {{ file_format_clause() }}
       {{ options_clause() }}
       {{ partition_cols(label="partitioned by") }}
@@ -170,6 +170,62 @@
     {{ py_write_table(compiled_code=compiled_code, target_relation=relation) }}
   {%- endif -%}
 {%- endmacro -%}
+
+{#--
+  clickzetta__create_partitioned_table_as:
+  Lakehouse CTAS does not support PARTITIONED BY / CLUSTERED BY.
+  This macro creates a partitioned table by:
+    1. Creating a tmp view to infer column types
+    2. DESCRIBE TABLE to get col defs
+    3. CREATE TABLE (explicit cols) PARTITIONED BY
+    4. INSERT INTO from tmp view
+  Returns the list of statement names executed.
+--#}
+{% macro clickzetta__create_partitioned_table_as(relation, compiled_code) %}
+  {%- set partition_by = config.get('partition_by', []) -%}
+  {%- if partition_by is string -%}{%- set partition_by = [partition_by] -%}{%- endif -%}
+  {%- set partition_by_lower = partition_by | map('lower') | list -%}
+
+  {%- set tmp_view = make_temp_relation(relation) -%}
+  {%- set tmp_view = tmp_view.include(database=false, schema=true) -%}
+
+  {%- call statement('create_tmp_view_for_partition') -%}
+    create or replace view {{ tmp_view }} as {{ compiled_code }}
+  {%- endcall -%}
+
+  {%- set describe_result = run_query('DESCRIBE TABLE ' ~ tmp_view) -%}
+  {%- set data_cols = [] -%}
+  {%- set part_col_defs = [] -%}
+  {%- set all_col_names = [] -%}
+  {%- for row in describe_result.rows -%}
+    {%- set col_name = row['column_name'] -%}
+    {%- set col_type = row['data_type'].split(' ')[0] -%}
+    {%- do all_col_names.append(col_name) -%}
+    {%- if col_name | lower in partition_by_lower -%}
+      {%- do part_col_defs.append(col_name ~ ' ' ~ col_type) -%}
+    {%- else -%}
+      {%- do data_cols.append(col_name ~ ' ' ~ col_type) -%}
+    {%- endif -%}
+  {%- endfor -%}
+
+  {%- call statement('create_partitioned_table') -%}
+    create table {{ relation }}
+    ({{ data_cols | join(', ') }})
+    {%- if part_col_defs %}
+    partitioned by ({{ part_col_defs | join(', ') }})
+    {%- endif %}
+    {{ clustered_cols(label="clustered by") }}
+  {%- endcall -%}
+
+  {%- call statement('main') -%}
+    insert into {{ relation }} ({{ all_col_names | join(', ') }})
+    select {{ all_col_names | join(', ') }} from {{ tmp_view }}
+  {%- endcall -%}
+
+  {%- call statement('drop_tmp_view_for_partition') -%}
+    drop view if exists {{ tmp_view }}
+  {%- endcall -%}
+{% endmacro %}
 
 {% macro clickzetta__create_dynamic_table_as(relation, sql) -%}
   {% set target_lag = config.get('target_lag') %}

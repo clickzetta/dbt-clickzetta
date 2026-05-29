@@ -33,17 +33,28 @@
   {{ run_hooks(pre_hooks) }}
 
   {#-- Incremental run logic --#}
+  {%- set has_partition = partition_by is not none -%}
+  {%- set has_cluster = config.get('clustered_by') is not none and config.get('buckets') is not none -%}
+
   {%- if existing_relation is none -%}
     {#-- Relation must be created --#}
-    {%- call statement('main', language=language) -%}
-      {{ create_table_as(False, target_relation, compiled_code, language) }}
-    {%- endcall -%}
+    {%- if language == 'sql' and (has_partition or has_cluster) -%}
+      {{ clickzetta__create_partitioned_table_as(target_relation, compiled_code) }}
+    {%- else -%}
+      {%- call statement('main', language=language) -%}
+        {{ create_table_as(False, target_relation, compiled_code, language) }}
+      {%- endcall -%}
+    {%- endif -%}
   {%- elif existing_relation.is_view -%}
     {#-- Relation must be dropped & recreated --#}
     {% do adapter.drop_relation(existing_relation) %}
-    {%- call statement('main', language=language) -%}
-      {{ create_table_as(False, target_relation, compiled_code, language) }}
-    {%- endcall -%}
+    {%- if language == 'sql' and (has_partition or has_cluster) -%}
+      {{ clickzetta__create_partitioned_table_as(target_relation, compiled_code) }}
+    {%- else -%}
+      {%- call statement('main', language=language) -%}
+        {{ create_table_as(False, target_relation, compiled_code, language) }}
+      {%- endcall -%}
+    {%- endif -%}
   {%- else -%}
     {#-- Relation must be merged --#}
     {%- call statement('create_tmp_relation', language=language) -%}

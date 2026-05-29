@@ -25,10 +25,18 @@
     {{ adapter.drop_relation(existing_relation.incorporate(type=old_relation_type)) }}
   {% endif %}
 
-  -- build model
-  {%- call statement('main', language=language) -%}
-    {{ create_table_as(False, target_relation, compiled_code, language) }}
-  {%- endcall -%}
+  {%- set has_partition = config.get('partition_by') is not none -%}
+  {%- set has_cluster = config.get('clustered_by') is not none and config.get('buckets') is not none -%}
+
+  {%- if language == 'sql' and (has_partition or has_cluster) -%}
+    {#-- Lakehouse CTAS does not support PARTITIONED BY / CLUSTERED BY. --#}
+    {{ clickzetta__create_partitioned_table_as(target_relation, compiled_code) }}
+  {%- else -%}
+    -- build model
+    {%- call statement('main', language=language) -%}
+      {{ create_table_as(False, target_relation, compiled_code, language) }}
+    {%- endcall -%}
+  {%- endif -%}
 
   {% set should_revoke = should_revoke(old_relation, full_refresh_mode=True) %}
 
