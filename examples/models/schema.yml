@@ -29,15 +29,21 @@ models:
 
   - name: dim_customers
     description: "客户汇总宽表：每个客户的订单数和总金额"
+    config:
+      persist_docs:
+        columns: true
     columns:
       - name: customer_id
+        description: "客户唯一标识"
         data_tests:
           - not_null
           - unique
       - name: order_count
+        description: "该客户的订单总数"
         data_tests:
           - not_null
       - name: total_amount
+        description: "该客户的订单总金额"
         data_tests:
           - not_null
 
