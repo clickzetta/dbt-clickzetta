@@ -197,7 +197,12 @@ class ClickZettaConnectionManager(SQLConnectionManager):
         if bindings:
             cast_bindings = []
             for binding in bindings:
-                cast_bindings.append(f"'{str(binding)}'")
+                if binding is None:
+                    cast_bindings.append("NULL")
+                elif isinstance(binding, bool):
+                    cast_bindings.append("true" if binding else "false")
+                else:
+                    cast_bindings.append(f"'{str(binding)}'")
             sql = sql % tuple(cast_bindings)
             bindings = None
 

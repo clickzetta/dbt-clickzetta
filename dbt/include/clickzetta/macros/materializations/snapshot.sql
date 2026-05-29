@@ -151,7 +151,7 @@
       {{ final_sql }}
   {% endcall %}
 
-  {% set should_revoke = should_revoke(target_relation_exists, full_refresh_mode) %}
+  {% set should_revoke = should_revoke(target_relation_exists, False) %}
 
   {% do persist_docs(target_relation, model) %}
 

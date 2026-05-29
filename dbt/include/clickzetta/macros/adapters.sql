@@ -427,8 +427,10 @@
 {% endmacro %}
 
 {% macro clickzetta__drop_relation(relation) -%}
+  {#-- relation.type uses underscores (dynamic_table, materialized_view) but SQL needs spaces --#}
+  {%- set drop_type = relation.type | string | replace('_', ' ') -%}
   {% call statement('drop_relation', auto_begin=False) -%}
-    drop {{ relation.type }} if exists {{ relation }}
+    drop {{ drop_type }} if exists {{ relation }}
   {%- endcall %}
 {% endmacro %}
 
