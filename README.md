@@ -169,6 +169,43 @@ select * from {{ source('raw', 'orders') }}
 {% endsnapshot %}
 ```
 
+## Known Limitations
+
+### `this.database` is always None
+
+ClickZetta does not have a database-level hierarchy (namespace is `workspace → schema → table`). As a result, `this.database` always returns `None` in Jinja macros.
+
+Use `{{ this }}` or `{{ this.schema }}.{{ this.identifier }}` instead:
+
+```sql
+-- ✅ Correct
+{{ config(
+    post_hook="create table stream if not exists {{ this.schema }}.{{ this.identifier }}_ts on table {{ this }} ..."
+) }}
+
+-- ❌ Broken — renders as "None.schema.table"
+"... {{ this.database }}.{{ this.schema }}.{{ this.identifier }} ..."
+```
+
+### Table Stream: `SELECT *` is not supported
+
+ClickZetta Table Streams expose system columns (`__change_type`, `__commit_timestamp`, `__commit_version`) that conflict with reserved identifiers. `SELECT *` from a stream expands these columns and fails.
+
+Always enumerate columns explicitly and backtick-quote the system columns:
+
+```sql
+-- ✅ Correct
+select
+    col1, col2, col3,
+    `__change_type`,
+    `__commit_timestamp`,
+    `__commit_version`
+from my_schema.my_table_stream
+
+-- ❌ Fails
+select * from my_schema.my_table_stream
+```
+
 ## Connection Parameters
 
 | Parameter | Required | Description |
