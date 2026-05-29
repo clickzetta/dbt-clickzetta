@@ -2,6 +2,8 @@
 
 The [dbt](https://www.getdbt.com/) adapter for [ClickZetta Lakehouse](https://www.yunqi.tech/).
 
+查看 **[examples/](./examples/)** 目录获取各功能的完整示例。
+
 ## Installation
 
 ```bash

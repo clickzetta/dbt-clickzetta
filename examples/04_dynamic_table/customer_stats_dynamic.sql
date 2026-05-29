@@ -1,0 +1,14 @@
+-- 基础动态表：每 5 分钟自动刷新
+{{ config(
+    materialized='dynamic_table',
+    refresh_interval='5 minutes',
+    refresh_vc='default_ap'
+) }}
+
+select
+    customer_id,
+    count(order_id)  as order_count,
+    sum(amount)      as total_amount,
+    max(updated_at)  as last_order_time
+from {{ source('raw', 'orders') }}
+group by customer_id
