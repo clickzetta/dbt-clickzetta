@@ -205,8 +205,10 @@ class ClickZettaConnectionManager(SQLConnectionManager):
                 elif isinstance(binding, (int, float)):
                     cast_bindings.append(str(binding))
                 else:
-                    # Escape single quotes (SQL standard) and % (Python format char)
-                    escaped = str(binding).replace("'", "''").replace("%", "%%")
+                    # Escape single quotes by doubling them (standard SQL escaping).
+                    # % does not need escaping: binding values are substituted via %s
+                    # and are not re-parsed as format strings after substitution.
+                    escaped = str(binding).replace("'", "''")
                     cast_bindings.append(f"'{escaped}'")
             sql = sql % tuple(cast_bindings)
             bindings = None
