@@ -191,7 +191,7 @@ class ClickZettaAdapter(SQLAdapter):
 
     @classmethod
     def convert_datetime_type(cls, agate_table, col_idx):
-        return "timestamp"
+        return "timestamp_ltz"
 
     def quote(self, identifier):
         return "`{}`".format(identifier)

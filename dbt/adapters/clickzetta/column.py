@@ -35,9 +35,10 @@ class ClickZettaColumn(dbtClassMixin, Column):  # type: ignore
         # PostgreSQL/generic numeric alias
         "numeric": "decimal",
         "real": "float",
-        # PostgreSQL timestamp aliases
-        "timestamptz": "timestamp",
-        "timestamp with time zone": "timestamp",
+        # PostgreSQL timestamp aliases — map to ClickZetta canonical names
+        # timestamp_ltz is supported natively; timestamptz is its PostgreSQL alias
+        "timestamptz": "timestamp_ltz",
+        "timestamp with time zone": "timestamp_ltz",
         "timestamp without time zone": "timestamp_ntz",
         # MySQL aliases
         "datetime": "timestamp_ntz",
