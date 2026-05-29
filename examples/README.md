@@ -10,7 +10,8 @@
 ```
 examples/
 ├── dbt_project.yml          # 项目配置
-├── profiles.yml             # 连接配置模板（需填入你的连接信息）
+├── profiles.yml.example     # 连接配置模板（cp 成 profiles.yml 后填入真实信息）
+├── profiles.yml             # 本地连接配置（已 gitignore，不提交）
 ├── seeds/                   # 内置测试数据（CSV 文件，dbt seed 自动导入）
 │   ├── raw_orders.csv       # 10 条订单数据
 │   ├── raw_customers.csv    # 5 条客户数据
@@ -52,7 +53,13 @@ pip install dbt-clickzetta
 
 ### 第二步：配置连接
 
-编辑 `profiles.yml`，将占位符替换为你的实际连接信息：
+复制模板文件并填入你的实际连接信息：
+
+```bash
+cp profiles.yml.example profiles.yml
+```
+
+然后编辑 `profiles.yml`（此文件已加入 `.gitignore`，不会被提交到 git）：
 
 ```yaml
 clickzetta_example:

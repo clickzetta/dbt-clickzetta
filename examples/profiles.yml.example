@@ -1,0 +1,12 @@
+clickzetta_example:
+  target: dev
+  outputs:
+    dev:
+      type: clickzetta
+      service: cn-shanghai-alicloud.api.clickzetta.com  # 见下方区域端点表
+      instance: your_instance      # ClickZetta 实例 ID，如 f8866243
+      workspace: your_workspace    # 工作空间名称，如 quick_start
+      username: your_username
+      password: your_password
+      schema: example              # 模型写入的 schema，不存在会自动创建
+      vcluster: default_ap         # 计算集群名称，如 default_ap
