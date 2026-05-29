@@ -1,7 +1,7 @@
--- 零拷贝克隆：CREATE TABLE t CLONE source
--- 适用场景：CI/CD 环境隔离、快速创建测试副本
--- 特点：零拷贝，不占用额外存储，创建速度极快
+-- Zero-copy clone: CREATE TABLE t CLONE source
+-- Use case: CI/CD environment isolation, fast test copy creation
+-- Feature: zero-copy, no extra storage, extremely fast creation
 {{ config(
     materialized='clone',
-    source='example.fct_orders_partitioned'
+    source=target.database ~ '.' ~ target.schema ~ '.fct_orders_partitioned'
 ) }}

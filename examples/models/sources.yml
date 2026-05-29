@@ -2,7 +2,8 @@ version: 2
 
 sources:
   - name: example_streams
-    schema: example
+    database: "{{ target.database }}"
+    schema: "{{ target.schema }}"
     description: "ClickZetta Table Stream sources for CDC change capture"
     tables:
       - name: orders_stream

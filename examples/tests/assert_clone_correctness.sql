@@ -1,4 +1,5 @@
--- 验证克隆表与源表数据一致
+-- Verify clone table matches source table data
+-- orders_clone_timetravel is excluded (requires source table history >= 1 hour)
 select check_name, actual, expected
 from (
     select 'orders_clone row_count' as check_name,
@@ -17,16 +18,7 @@ from (
 
 union all
 
-select check_name, actual, expected
-from (
-    select 'orders_clone_timetravel row_count' as check_name,
-           count(*) as actual, 11 as expected
-    from {{ ref('orders_clone_timetravel') }}
-) t where actual != expected
-
-union all
-
--- 克隆表与源表数据完全一致
+-- Clone matches source
 select
     'clone_vs_source_consistency' as check_name,
     clone_total as actual,

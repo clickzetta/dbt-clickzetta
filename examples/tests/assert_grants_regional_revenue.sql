@@ -1,7 +1,7 @@
--- 验证 regional_revenue_with_grants 表已授权给 workspace_analyst（SELECT）
--- 返回 0 行 = 通过，返回 1 行 = 权限不存在（测试失败）
+-- Verify regional_revenue_with_grants has been granted SELECT to workspace_analyst
+-- Returns 0 rows = pass, 1 row = grant missing (test fails)
 {{ check_grant(
-    relation_name = target.schema ~ '.regional_revenue_with_grants',
+    relation_name = target.database ~ '.' ~ target.schema ~ '.regional_revenue_with_grants',
     rel_type      = 'TABLE',
     privilege     = 'select',
     grantee       = 'workspace_analyst'
