@@ -39,7 +39,7 @@ def _get_dbt_core_version():
     pre = parts["prekind"] + "1" if parts["prekind"] else ""
     return f"{minor}{pre}"
 package_name = "dbt-clickzetta"
-package_version = "1.8.0"
+package_version = "{major}.{minor}.{patch}".format(**_get_plugin_version_dict())
 description = """The ClickZetta adapter plugin for dbt"""
 setup(
     name=package_name,
