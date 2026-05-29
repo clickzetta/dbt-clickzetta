@@ -234,8 +234,6 @@ class ClickZettaAdapter(SQLAdapter):
         return columns
 
     def get_relation(self, database: str, schema: str, identifier: str) -> Optional[BaseRelation]:
-        if not self.Relation.get_default_include_policy().database:
-            database = None
         return super().get_relation(database, schema, identifier)
 
     def check_schema_exists(self, database, schema):
@@ -277,7 +275,7 @@ class ClickZettaAdapter(SQLAdapter):
                 _type = self.Relation.External
             relations.append(
                 self.Relation.create(
-                    database=None,
+                    database=schema_relation.database,
                     schema=_schema,
                     identifier=_identifier,
                     quote_policy=quote_policy,
@@ -294,7 +292,7 @@ class ClickZettaAdapter(SQLAdapter):
                 row_dict = {k.lower(): v for k, v in zip(stream_results.column_names, row)}
                 relations.append(
                     self.Relation.create(
-                        database=None,
+                        database=schema_relation.database,
                         schema=row_dict.get("schema_name", schema_relation.schema),
                         identifier=row_dict["name"],
                         quote_policy=quote_policy,
