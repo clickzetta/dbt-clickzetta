@@ -21,14 +21,14 @@
 
   {% set invalid_strategy_msg -%}
     Invalid incremental strategy provided: {{ raw_strategy }}
-    Expected one of: 'append', 'merge', 'insert_overwrite'
+    Expected one of: 'append', 'merge', 'insert_overwrite', 'delete+insert'
   {%- endset %}
 
   {% set invalid_merge_msg -%}
     Invalid incremental strategy provided: {{ raw_strategy }}
     You can only choose this strategy when file_format is set to 'delta' or 'iceberg' or 'hudi'
   {%- endset %}
-  {% if raw_strategy not in ['append', 'merge', 'insert_overwrite'] %}
+  {% if raw_strategy not in ['append', 'merge', 'insert_overwrite', 'delete+insert'] %}
     {% do exceptions.raise_compiler_error(invalid_strategy_msg) %}
   {% endif %}
 

@@ -315,7 +315,7 @@ class ClickZettaAdapter(SQLAdapter):
         return f"DATEADD({interval}, {number}, {add_to})"
 
     def valid_incremental_strategies(self):
-        return ["append", "merge", "insert_overwrite"]
+        return ["append", "merge", "insert_overwrite", "delete+insert"]
 
     def standardize_grants_dict(self, grants_table: agate.Table) -> Dict[str, List[str]]:
         # SHOW GRANTS ON TABLE returns columns:

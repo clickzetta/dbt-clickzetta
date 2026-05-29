@@ -8,6 +8,8 @@
                                                 database=database,
                                                 type='table') -%}
   {%- set grant_config = config.get('grants') -%}
+  {%- set vcluster = config.get('vcluster') -%}
+  {%- if vcluster -%}{{ clickzetta__use_vcluster(vcluster) }}{%- endif -%}
 
   {{ run_hooks(pre_hooks) }}
 

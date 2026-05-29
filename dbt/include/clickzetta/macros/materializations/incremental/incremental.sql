@@ -14,6 +14,7 @@
   {%- set on_schema_change = incremental_validate_on_schema_change(config.get('on_schema_change'), default='ignore') -%}
   {%- set incremental_predicates = config.get('predicates', none) or config.get('incremental_predicates', none) -%}
   {%- set grant_config = config.get('grants') -%}
+  {%- set vcluster = config.get('vcluster') -%}
   {%- set target_relation = this -%}
   {%- set existing_relation = load_relation(this) -%}
   {%- set tmp_relation = make_temp_relation(this) -%}
@@ -22,6 +23,8 @@
   {%- if language == 'sql'-%}
     {%- set tmp_relation = tmp_relation.include(database=false, schema=true) -%}
   {%- endif -%}
+
+  {%- if vcluster -%}{{ clickzetta__use_vcluster(vcluster) }}{%- endif -%}
 
   {#-- Set Overwrite Mode --#}
   {%- if strategy == 'insert_overwrite' and partition_by -%}

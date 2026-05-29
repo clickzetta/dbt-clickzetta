@@ -52,7 +52,7 @@
 
 {#
   Create indexes after table creation.
-  Supports bloomfilter and inverted index types.
+  Supports bloomfilter, inverted, and vector index types.
 
   Usage in model config:
     {{ config(
@@ -61,7 +61,9 @@
             {'type': 'bloomfilter', 'columns': ['order_id']},
             {'type': 'bloomfilter', 'columns': ['customer_id'], 'name': 'idx_cust'},
             {'type': 'inverted', 'columns': ['status']},
-            {'type': 'inverted', 'columns': ['description'], 'analyzer': 'unicode'}
+            {'type': 'inverted', 'columns': ['description'], 'analyzer': 'unicode'},
+            {'type': 'vector', 'columns': ['embedding'], 'distance_function': 'cosine_distance'},
+            {'type': 'vector', 'columns': ['vec'], 'distance_function': 'l2_distance', 'scalar_type': 'f32'}
         ]
     ) }}
 
@@ -70,7 +72,9 @@
   - For dbt models, BUILD INDEX is not needed: dbt always writes fresh data after CREATE TABLE,
     so new data is automatically indexed
   - bloomfilter: single column only, optional ngram analyzer
-  - inverted: single column, optional analyzer (unicode, stemmer, etc.)
+  - inverted: single column, optional analyzer (unicode, stemmer, chinese, etc.)
+  - vector: single column, distance_function required (cosine_distance, l2_distance, dot_product,
+    jaccard_distance, hamming_distance), optional scalar_type (f32, f16, b1)
 #}
 {% macro clickzetta__create_indexes(relation) %}
   {%- set indexes = config.get('indexes', []) -%}
@@ -101,12 +105,110 @@
             {%- if analyzer is not none %} properties('analyzer'='{{ analyzer }}'){%- endif %}
           {% endcall %}
 
+        {%- elif index_type == 'vector' -%}
+          {%- set distance_fn = index.get('distance_function', 'cosine_distance') -%}
+          {%- set scalar_type = index.get('scalar_type', none) -%}
+          {% call statement('create_index_' ~ loop.index) %}
+            create vector index if not exists {{ qualified_name }}
+            on table {{ relation }}({{ col }})
+            properties(
+              "distance.function" = "{{ distance_fn }}"
+              {%- if scalar_type is not none %}, "scalar.type" = "{{ scalar_type }}"{%- endif %}
+            )
+          {% endcall %}
+
         {%- else -%}
-          {{ exceptions.raise_compiler_error("Unsupported index type: '" ~ index_type ~ "'. Supported types: bloomfilter, inverted") }}
+          {{ exceptions.raise_compiler_error("Unsupported index type: '" ~ index_type ~ "'. Supported types: bloomfilter, inverted, vector") }}
         {%- endif -%}
       {%- endfor -%}
     {%- endfor -%}
   {%- endif -%}
+{% endmacro %}
+
+
+{# ------- OPTIMIZE ------- #}
+
+{#
+  Merge small files for a table or specific partitions.
+  Useful after high-frequency incremental writes.
+
+  Usage as post-hook:
+    {{ config(post_hook="{{ clickzetta__optimize_table(this) }}") }}
+
+  Or with partition filter:
+    {{ config(post_hook="{{ clickzetta__optimize_table(this, 'dt >= current_date() - interval 7 days') }}") }}
+
+  Or via run-operation:
+    dbt run-operation optimize_table --args '{relation: example.my_table}'
+#}
+{% macro clickzetta__optimize_table(relation, where=none) %}
+  {% set optimize_sql %}
+    optimize {{ relation }}
+    {%- if where is not none %} where {{ where }}{%- endif %}
+  {% endset %}
+  {% do run_query(optimize_sql) %}
+  {% if execute %}
+    {{ log("Optimized " ~ relation ~ (" where " ~ where if where else ""), info=true) }}
+  {% endif %}
+{% endmacro %}
+
+{% macro optimize_table(relation, where=none) %}
+  {{ clickzetta__optimize_table(relation, where) }}
+{% endmacro %}
+
+{# ------- VCLUSTER ------- #}
+
+{#
+  Switch the active VCluster for the current session before running a model.
+  Useful for resource isolation: large models use a bigger cluster, small models use a smaller one.
+
+  Usage in model config (applied automatically via pre-hook in table/incremental materializations):
+    {{ config(vcluster='large_ap') }}
+
+  Or as an explicit pre-hook:
+    {{ config(pre_hook="{{ clickzetta__use_vcluster('large_ap') }}") }}
+
+  Or via run-operation to switch manually:
+    dbt run-operation use_vcluster --args '{vcluster: large_ap}'
+#}
+{% macro clickzetta__use_vcluster(vcluster) %}
+  {% if vcluster %}
+    {% set sql %}use vcluster {{ vcluster }}{% endset %}
+    {% do run_query(sql) %}
+  {% endif %}
+{% endmacro %}
+
+{% macro use_vcluster(vcluster) %}
+  {{ clickzetta__use_vcluster(vcluster) }}
+{% endmacro %}
+
+{# ------- UNDROP ------- #}
+
+{#
+  Recover a recently dropped table within the retention period.
+
+  Usage:
+    dbt run-operation undrop_table --args '{relation: example.my_table}'
+
+  To list recently dropped tables first:
+    dbt run-operation show_tables_history --args '{schema: example}'
+#}
+{% macro undrop_table(relation) %}
+  {% set sql %}undrop table {{ relation }}{% endset %}
+  {% do run_query(sql) %}
+  {% if execute %}
+    {{ log("Recovered table: " ~ relation, info=true) }}
+  {% endif %}
+{% endmacro %}
+
+{% macro show_tables_history(schema) %}
+  {% set sql %}show tables history in {{ schema }}{% endset %}
+  {% set results = run_query(sql) %}
+  {% if execute %}
+    {% for row in results.rows %}
+      {{ log(row | join(' | '), info=true) }}
+    {% endfor %}
+  {% endif %}
 {% endmacro %}
 
 {# ------- END INDEXES ------- #}

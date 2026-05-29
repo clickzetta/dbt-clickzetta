@@ -80,6 +80,34 @@
 {% endmacro %}
 
 
+{% macro get_delete_insert_sql(source_relation, target_relation, unique_key, incremental_predicates=none) %}
+  {#-- DELETE matching rows, then INSERT all rows from source --#}
+  {%- set dest_columns = adapter.get_columns_in_relation(target_relation) -%}
+  {%- set dest_cols_csv = dest_columns | map(attribute='quoted') | join(', ') -%}
+
+  {% if unique_key is sequence and unique_key is not mapping and unique_key is not string %}
+    delete from {{ target_relation }}
+    where ({{ unique_key | join(', ') }}) in (
+      select {{ unique_key | join(', ') }} from {{ source_relation }}
+      {%- if incremental_predicates %} where {{ incremental_predicates | join(' and ') }}{%- endif %}
+    );
+  {% elif unique_key %}
+    delete from {{ target_relation }}
+    where {{ unique_key }} in (
+      select {{ unique_key }} from {{ source_relation }}
+      {%- if incremental_predicates %} where {{ incremental_predicates | join(' and ') }}{%- endif %}
+    );
+  {% else %}
+    {{ exceptions.raise_compiler_error("delete+insert strategy requires unique_key") }}
+  {% endif %}
+
+  insert into table {{ target_relation }} ({{ dest_cols_csv }})
+  select {{ dest_cols_csv }} from {{ source_relation }}
+  {%- if incremental_predicates %} where {{ incremental_predicates | join(' and ') }}{%- endif %}
+
+{% endmacro %}
+
+
 {% macro dbt_clickzetta_get_incremental_sql(strategy, source, target, existing, unique_key, incremental_predicates) %}
   {%- if strategy == 'append' -%}
     {{ get_insert_into_sql(source, target, incremental_predicates) }}
@@ -87,6 +115,8 @@
     {{ get_insert_overwrite_sql(source, target, existing, incremental_predicates) }}
   {%- elif strategy == 'merge' -%}
     {{ get_merge_sql(target, source, unique_key, dest_columns=none, incremental_predicates=incremental_predicates) }}
+  {%- elif strategy == 'delete+insert' -%}
+    {{ get_delete_insert_sql(source, target, unique_key, incremental_predicates) }}
   {%- else -%}
     {% set no_sql_for_strategy_msg -%}
       No known SQL for the incremental strategy provided: {{ strategy }}
