@@ -177,7 +177,7 @@ class ClickZettaConnectionManager(SQLConnectionManager):
         logger.debug(f"dbt_execute_sql: {sql}")
         response = self.get_response(cursor)
         if fetch:
-            table = self.get_result_from_cursor(cursor)
+            table = self.get_result_from_cursor(cursor, limit)
         else:
             table = dbt_common.clients.agate_helper.empty_table()
         return response, table

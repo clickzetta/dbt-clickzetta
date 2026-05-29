@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Mapping, Any, Optional, List, Union, Dict, Set
+from typing import Mapping, Any, Optional, List, Union, Dict, Set, Tuple
 from concurrent.futures import Future
 
 import agate
@@ -88,12 +88,60 @@ class ClickZettaAdapter(SQLAdapter):
                 )
         return result
 
+    def get_catalog(self, relation_configs, used_schemas):
+        """Build catalog using SHOW TABLES + DESCRIBE TABLE (INFORMATION_SCHEMA not available)."""
+        catalog_rows = []
+        with self.connection_named("catalog"):
+            for database, schema in used_schemas:
+                try:
+                    _, tables_table = self.execute(f"SHOW TABLES IN {schema}", fetch=True)
+                    for tbl_row in tables_table.rows:
+                        tbl_name = tbl_row["table_name"]
+                        tbl_type = "view" if tbl_row["is_view"] else "table"
+                        try:
+                            _, desc_table = self.execute(
+                                f"DESCRIBE TABLE {schema}.{tbl_name}", fetch=True
+                            )
+                            for idx, col_row in enumerate(desc_table.rows):
+                                catalog_rows.append({
+                                    "table_database": None,
+                                    "table_schema": schema,
+                                    "table_name": tbl_name,
+                                    "table_type": tbl_type,
+                                    "column_name": col_row["column_name"],
+                                    "column_index": idx,
+                                    "column_type": col_row["data_type"],
+                                    "column_comment": col_row.get("comment", ""),
+                                    "stats:row_count:label": None,
+                                    "stats:row_count:value": None,
+                                    "stats:row_count:description": None,
+                                    "stats:row_count:include": False,
+                                    "stats:bytes:label": None,
+                                    "stats:bytes:value": None,
+                                    "stats:bytes:description": None,
+                                    "stats:bytes:include": False,
+                                    "stats:last_modified:label": None,
+                                    "stats:last_modified:value": None,
+                                    "stats:last_modified:description": None,
+                                    "stats:last_modified:include": False,
+                                })
+                        except Exception as e:
+                            logger.debug(f"Could not describe {schema}.{tbl_name}: {e}")
+                except Exception as e:
+                    logger.debug(f"Could not list tables in {schema}: {e}")
+
+        if not catalog_rows:
+            catalog_table = agate.Table([], [])
+        else:
+            col_names = list(catalog_rows[0].keys())
+            rows = [[r[c] for c in col_names] for r in catalog_rows]
+            catalog_table = agate.Table(rows, col_names)
+
+        return catalog_table, []
+
     @classmethod
     def convert_text_type(cls, agate_table, col_idx):
         return "string"
-
-    @classmethod
-    def convert_number_type(cls, agate_table, col_idx):
         decimals = agate_table.aggregate(agate.MaxPrecision(col_idx))
         return "double" if decimals else "bigint"
 
@@ -118,14 +166,14 @@ class ClickZettaAdapter(SQLAdapter):
         # Convert the Row to a dict
         dict_rows = [dict(zip(row._keys, row._values)) for row in raw_rows]
 
-        rows = [row for row in dict_rows if not row["col_name"].startswith("#")]
+        rows = [row for row in dict_rows if not row["column_name"].startswith("#")]
 
         return [
             ClickZettaColumn(
                 table_database=None,
                 table_schema=relation.schema,
                 table_name=relation.name,
-                column=column["col_name"],
+                column=column["column_name"],
                 dtype=column["data_type"],
             )
             for idx, column in enumerate(rows)
@@ -165,8 +213,9 @@ class ClickZettaAdapter(SQLAdapter):
         kwargs = {"schema_relation": schema_relation}
         try:
             results = self.execute_macro(LIST_RELATIONS_MACRO_NAME, kwargs=kwargs)
-        except DbtRuntimeError as exc:
-            if "Object does not exist" in str(exc):
+        except Exception as exc:
+            err = str(exc)
+            if "Object does not exist" in err or "NotFound" in err or "not found" in err.lower():
                 return []
             raise
 

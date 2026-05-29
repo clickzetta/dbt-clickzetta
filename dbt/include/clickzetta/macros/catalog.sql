@@ -1,60 +1,54 @@
 {% macro clickzetta__get_catalog(information_schema, schemas) -%}
-  {% set information_schema = 'SYS.INFORMATION_SCHEMA'%}
+  {#
+    INFORMATION_SCHEMA is not reliably available in all Lakehouse environments.
+    We build the catalog by iterating SHOW TABLES per schema and DESCRIBE TABLE per table.
+  #}
   {% set query %}
-      with tables as (
-
-          select
-              table_catalog as `table_database`,
-              table_schema as `table_schema`,
-              table_name as `table_name`,
-              table_type as `table_type`,
-
-
-              'Row Count' as `stats:row_count:label`,
-              row_count as `stats:row_count:value`,
-              'An approximate count of rows in this table' as `stats:row_count:description`,
-              (row_count is not null) as `stats:row_count:include`,
-
-              'Approximate Size' as `stats:bytes:label`,
-              bytes as `stats:bytes:value`,
-              'Approximate size of the table as reported by clickzetta' as `stats:bytes:description`,
-              (bytes is not null) as `stats:bytes:include`,
-
-              'Last Modified' as `stats:last_modified:label`,
-              cast(last_modify_time as string) as `stats:last_modified:value`,
-              'The timestamp for last update/change' as `stats:last_modified:description`,
-              (last_modify_time is not null and table_type='MANAGED_TABLE') as `stats:last_modified:include`
-
-          from {{ information_schema }}.tables
-          where delete_time is null
-      ),
-
-      columns as (
-
-          select
-              table_catalog as `table_database`,
-              table_schema as `table_schema`,
-              table_name as `table_name`,
-
-              column_name as `column_name`,
-              column_id as `column_index`,
-              data_type as `column_type`,
-              comment as `column_comment`
-
-          from {{ information_schema }}.columns
-          where delete_time is null
-      )
-
-select *
-from tables
-         join columns using (`table_database`, `table_schema`, `table_name`)
-where (
-          {%- for schema in schemas -%}
-          upper(`table_schema`) = upper('{{ schema }}'){%- if not loop.last %} or {% endif -%}
-          {%- endfor -%}
-          )
-order by `column_index`
-    {%- endset -%}
+    with catalog_data as (
+      {% for schema in schemas %}
+        {% set show_tables_sql %}
+          SHOW TABLES IN {{ schema }}
+        {% endset %}
+        {% set tables = run_query(show_tables_sql) %}
+        {% for row in tables %}
+          {% set tbl_schema = row['schema_name'] %}
+          {% set tbl_name   = row['table_name'] %}
+          {% set tbl_type   = 'view' if row['is_view'] else 'table' %}
+          {% set desc_sql %}
+            DESCRIBE TABLE {{ tbl_schema }}.{{ tbl_name }}
+          {% endset %}
+          {% set cols = run_query(desc_sql) %}
+          {% for col in cols %}
+            select
+              '{{ information_schema.database }}'  as `table_database`,
+              '{{ tbl_schema }}'                   as `table_schema`,
+              '{{ tbl_name }}'                     as `table_name`,
+              '{{ tbl_type }}'                     as `table_type`,
+              '{{ col['column_name'] }}'            as `column_name`,
+              {{ loop.index }}                      as `column_index`,
+              '{{ col['data_type'] }}'              as `column_type`,
+              '{{ col['comment'] }}'                as `column_comment`,
+              null                                  as `stats:row_count:label`,
+              null                                  as `stats:row_count:value`,
+              null                                  as `stats:row_count:description`,
+              false                                 as `stats:row_count:include`,
+              null                                  as `stats:bytes:label`,
+              null                                  as `stats:bytes:value`,
+              null                                  as `stats:bytes:description`,
+              false                                 as `stats:bytes:include`,
+              null                                  as `stats:last_modified:label`,
+              null                                  as `stats:last_modified:value`,
+              null                                  as `stats:last_modified:description`,
+              false                                 as `stats:last_modified:include`
+            {% if not loop.last %} union all {% endif %}
+          {% endfor %}
+          {% if not loop.last %} union all {% endif %}
+        {% endfor %}
+        {% if not loop.last %} union all {% endif %}
+      {% endfor %}
+    )
+    select * from catalog_data
+  {% endset %}
 
   {{ return(run_query(query)) }}
 

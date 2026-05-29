@@ -76,7 +76,7 @@ class TestClickZettaAdapter(unittest.TestCase):
             ("col10", "char(23)"),
         ]
 
-        input_cols = [Row(keys=["col_name", "data_type"], values=r) for r in plain_rows]
+        input_cols = [Row(keys=["column_name", "data_type"], values=r) for r in plain_rows]
 
         config = self._get_target_http(self.project_cfg)
         rows = ClickZettaAdapter(config, MP_CONTEXT).parse_describe_extended(relation, input_cols)
@@ -154,8 +154,9 @@ class TestClickZettaAdapter(unittest.TestCase):
     def test_relation_with_database(self):
         config = self._get_target_http(self.project_cfg)
         adapter = ClickZettaAdapter(config, MP_CONTEXT)
-        # fine
-        adapter.Relation.create(schema="dbt", identifier="dbt_table_1")
-        with self.assertRaises(DbtRuntimeError):
-            # not fine - database set
-            adapter.Relation.create(database="db", schema="dbt", identifier="dbt_table_1")
+        # database is accepted but not rendered (IncludePolicy.database=False)
+        rel = adapter.Relation.create(schema="dbt", identifier="dbt_table_1")
+        self.assertNotIn(".", rel.render().split("dbt")[0])  # no database prefix
+        rel_with_db = adapter.Relation.create(database="db", schema="dbt", identifier="dbt_table_1")
+        # render should not include database
+        self.assertNotIn("db.", rel_with_db.render())
