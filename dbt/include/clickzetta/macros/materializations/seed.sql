@@ -18,9 +18,13 @@
   {% set column_override = model['config'].get('column_types', {}) %}
 
   {#
-    Types that require inline literal syntax in ClickZetta INSERT statements.
-    Parameterized binding (%s) hangs or fails for these types.
-    Canonical ClickZetta names + common aliases all included.
+    ClickZetta does not support implicit string-to-temporal CAST in INSERT statements.
+    `cast('2024-01-01' as date)` and `cast('2024-01-01 12:00:00' as timestamp)` fail
+    because ClickZetta requires explicit type literal syntax for temporal types.
+    Use the type-prefixed literal form instead: DATE 'value', TIMESTAMP 'value', etc.
+
+    Note: bindings are substituted on the Python side (sql % tuple(cast_bindings)),
+    so %s is a Python format placeholder, not a database parameterized query marker.
   #}
   {% set inline_type_prefixes = {
     'timestamp':     'TIMESTAMP',
