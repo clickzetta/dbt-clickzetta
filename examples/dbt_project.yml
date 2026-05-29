@@ -7,6 +7,7 @@ profile: clickzetta_example
 model-paths: ["models"]
 seed-paths: ["seeds"]
 snapshot-paths: ["snapshots"]
+macro-paths: ["macros"]
 test-paths: ["tests"]
 
 target-path: "target"
