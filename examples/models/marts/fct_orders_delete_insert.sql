@@ -1,7 +1,8 @@
 {{ config(
     materialized='incremental',
     incremental_strategy='delete+insert',
-    unique_key='order_id'
+    unique_key='order_id',
+    vcluster='DEFAULT_AP'
 ) }}
 
 select

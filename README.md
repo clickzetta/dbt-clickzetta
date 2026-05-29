@@ -133,7 +133,7 @@ dbt run-operation show_tables_history --args '{schema: my_schema}'
 dbt run-operation undrop --args '{relation: my_schema.my_table}'
 
 # 删除对象（type: table | view | dynamic_table | materialized_view | stream）
-dbt run-operation drop_relation --args '{relation: my_schema.my_table, type: table}'
+dbt run-operation drop_object --args '{relation: my_schema.my_table, type: table}'
 
 # 手动刷新动态表
 dbt run-operation refresh_dynamic_table --args '{model_name: my_dynamic_table}'

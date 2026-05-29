@@ -230,21 +230,22 @@
 {% endmacro %}
 
 {#
-  Drop a relation by type. Useful for manual cleanup via run-operation.
+  Drop an object by type. Useful for manual cleanup via run-operation.
   type: table | view | dynamic_table | materialized_view | stream
 
   Usage:
-    dbt run-operation drop_relation --args '{relation: example.my_table, type: table}'
-    dbt run-operation drop_relation --args '{relation: example.my_view, type: view}'
+    dbt run-operation drop_object --args '{relation: example.my_table, type: table}'
+    dbt run-operation drop_object --args '{relation: example.my_view, type: view}'
 
   Note: table, dynamic_table, materialized_view, and stream support UNDROP recovery.
         view, external table, schema do NOT support recovery.
+  Note: Named drop_object (not drop_relation) to avoid conflict with dbt-core's built-in drop_relation macro.
 #}
-{% macro drop_relation(relation, type='table') %}
-  {%- set drop_type = type | replace('_', ' ') -%}
-  {% set sql %}drop {{ drop_type }} if exists {{ relation }}{% endset %}
-  {% do run_query(sql) %}
+{% macro drop_object(relation, type='table') %}
   {% if execute %}
+    {%- set drop_type = type | replace('_', ' ') -%}
+    {% set sql %}drop {{ drop_type }} if exists {{ relation }}{% endset %}
+    {% do run_query(sql) %}
     {{ log("Dropped " ~ type ~ ": " ~ relation, info=true) }}
   {% endif %}
 {% endmacro %}

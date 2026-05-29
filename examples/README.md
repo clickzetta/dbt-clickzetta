@@ -351,7 +351,7 @@ dbt run-operation show_tables_history --args '{schema: example}' --profiles-dir 
 dbt run-operation undrop --args '{relation: example.my_table}' --profiles-dir .
 
 # 删除对象（type: table | view | dynamic_table | materialized_view | stream）
-dbt run-operation drop_relation --args '{relation: example.my_table, type: table}' --profiles-dir .
+dbt run-operation drop_object --args '{relation: example.my_table, type: table}' --profiles-dir .
 ```
 
 > **注意**：`undrop` 支持恢复普通表、动态表、物化视图、Table Stream，统一使用 `UNDROP TABLE` 语法。视图、外部表、Schema 不支持恢复。
