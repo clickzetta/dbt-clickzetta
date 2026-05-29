@@ -172,9 +172,19 @@
     dbt run-operation use_vcluster --args '{vcluster: large_ap}'
 #}
 {% macro clickzetta__use_vcluster(vcluster) %}
-  {% if vcluster %}
-    {% set sql %}use vcluster {{ vcluster }}{% endset %}
-    {% do run_query(sql) %}
+  {% if vcluster and execute %}
+    {# Validate vcluster exists before switching #}
+    {% set existing = run_query("show vclusters") %}
+    {% set names = existing.columns[0].values() | map('upper') | list %}
+    {% if vcluster | upper not in names %}
+      {{ exceptions.raise_compiler_error(
+        "VCluster '" ~ vcluster ~ "' does not exist. Available: " ~ names | join(', ')
+      ) }}
+    {% endif %}
+    {% call statement('use_vcluster') %}
+      use vcluster {{ vcluster }}
+    {% endcall %}
+    {{ log("Switched to VCluster: " ~ vcluster, info=true) }}
   {% endif %}
 {% endmacro %}
 
