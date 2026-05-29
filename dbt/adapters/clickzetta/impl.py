@@ -221,6 +221,11 @@ class ClickZettaAdapter(SQLAdapter):
 
     def list_relations_without_caching(self, schema_relation: ClickZettaRelation) \
             -> List[ClickZettaRelation]:  # type: ignore
+        # check_schema_exists before querying to avoid connector-level error logs
+        # when the schema doesn't exist yet (e.g. snapshot schema before first dbt snapshot run)
+        if not self.check_schema_exists(schema_relation.database, schema_relation.schema):
+            return []
+
         kwargs = {"schema_relation": schema_relation}
         try:
             results = self.execute_macro(LIST_RELATIONS_MACRO_NAME, kwargs=kwargs)
