@@ -74,6 +74,7 @@
 
   {% set should_revoke = should_revoke(existing_relation, full_refresh_mode) %}
   {% do apply_grants(target_relation, grant_config, should_revoke=should_revoke) %}
+  {{ clickzetta__create_indexes(target_relation) }}
 
   {% do persist_docs(target_relation, model) %}
 

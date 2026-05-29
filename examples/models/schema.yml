@@ -104,3 +104,27 @@ models:
       - name: revenue
         data_tests:
           - not_null
+
+  - name: orders_with_indexes
+    description: "演示索引自动创建：Bloomfilter（order_id, customer_id）+ 倒排（status）"
+    columns:
+      - name: order_id
+        data_tests:
+          - not_null
+          - unique
+
+  - name: orders_clone
+    description: "零拷贝克隆示例：克隆自 fct_orders_partitioned"
+    columns:
+      - name: order_id
+        data_tests:
+          - not_null
+          - unique
+
+  - name: orders_clone_timetravel
+    description: "Time Travel 克隆示例：克隆指定时间点的历史版本"
+    columns:
+      - name: order_id
+        data_tests:
+          - not_null
+          - unique

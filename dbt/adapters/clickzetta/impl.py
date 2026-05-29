@@ -153,8 +153,6 @@ class ClickZettaAdapter(SQLAdapter):
     @classmethod
     def convert_text_type(cls, agate_table, col_idx):
         return "string"
-        decimals = agate_table.aggregate(agate.MaxPrecision(col_idx))
-        return "double" if decimals else "bigint"
 
     @classmethod
     def convert_date_type(cls, agate_table, col_idx):
@@ -259,6 +257,25 @@ class ClickZettaAdapter(SQLAdapter):
                     type=_type,
                 )
             )
+
+        # SHOW TABLES does not include streams — query them separately
+        try:
+            _, stream_results = self.execute(
+                f"show streams in {schema_relation.schema}", fetch=True
+            )
+            for row in stream_results.rows:
+                row_dict = {k.lower(): v for k, v in zip(stream_results.column_names, row)}
+                relations.append(
+                    self.Relation.create(
+                        database=None,
+                        schema=row_dict.get("schema_name", schema_relation.schema),
+                        identifier=row_dict["name"],
+                        quote_policy=quote_policy,
+                        type=self.Relation.get_relation_type.Stream,
+                    )
+                )
+        except Exception:
+            pass  # SHOW STREAMS not supported or schema has no streams
 
         return relations
 

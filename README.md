@@ -64,6 +64,9 @@ dbt docs generate
 | Python models | ✅ |
 | `on_schema_change` | ✅ (append_new_columns, sync_all_columns) |
 | `grants` | ✅ |
+| `clone` materialization | ✅ (零拷贝克隆 + Time Travel 克隆) |
+| Indexes (Bloomfilter / Inverted) | ✅ (通过 `indexes` config 自动创建) |
+| Table Stream as source | ✅ (通过 `sources.yml` 声明，`source()` 引用) |
 
 ## Incremental Strategies
 

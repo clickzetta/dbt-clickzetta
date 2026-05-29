@@ -42,6 +42,7 @@ class ClickZettaRelationType(StrEnum):
     External = "external"
     MaterializedView = "materialized_view"
     DynamicTable = "dynamic_table"
+    Stream = "stream"
 
 
 @dataclass(frozen=True, eq=False, repr=False)
@@ -58,9 +59,17 @@ class ClickZettaRelation(BaseRelation):
     def is_dynamic_table(self) -> bool:
         return self.type == ClickZettaRelationType.DynamicTable
 
+    @property
+    def is_stream(self) -> bool:
+        return self.type == ClickZettaRelationType.Stream
+
     @classproperty
     def DynamicTable(cls) -> str:
         return 'dynamic_table'
+
+    @classproperty
+    def Stream(cls) -> str:
+        return 'stream'
 
     @classproperty
     def get_relation_type(cls) -> Type[ClickZettaRelationType]:

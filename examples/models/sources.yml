@@ -1,0 +1,9 @@
+version: 2
+
+sources:
+  - name: example_streams
+    schema: example
+    description: "ClickZetta Table Stream 示例，用于 CDC 变更捕获"
+    tables:
+      - name: orders_stream
+        description: "fct_orders_partitioned 的变更流，捕获 INSERT/UPDATE/DELETE"

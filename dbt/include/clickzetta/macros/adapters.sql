@@ -48,6 +48,69 @@
 
 {# ------- END GRANTS ------- #}
 
+{# ------- INDEXES ------- #}
+
+{#
+  Create indexes after table creation.
+  Supports bloomfilter and inverted index types.
+
+  Usage in model config:
+    {{ config(
+        materialized='table',
+        indexes=[
+            {'type': 'bloomfilter', 'columns': ['order_id']},
+            {'type': 'bloomfilter', 'columns': ['customer_id'], 'name': 'idx_cust'},
+            {'type': 'inverted', 'columns': ['status']},
+            {'type': 'inverted', 'columns': ['description'], 'analyzer': 'unicode'}
+        ]
+    ) }}
+
+  Notes:
+  - Index name must be in the same schema as the table (use schema.index_name syntax)
+  - For dbt models, BUILD INDEX is not needed: dbt always writes fresh data after CREATE TABLE,
+    so new data is automatically indexed
+  - bloomfilter: single column only, optional ngram analyzer
+  - inverted: single column, optional analyzer (unicode, stemmer, etc.)
+#}
+{% macro clickzetta__create_indexes(relation) %}
+  {%- set indexes = config.get('indexes', []) -%}
+  {%- if indexes -%}
+    {%- for index in indexes -%}
+      {%- set index_type = index.get('type', 'bloomfilter') | lower -%}
+      {%- set columns = index.get('columns', []) -%}
+      {%- if columns is string -%}{%- set columns = [columns] -%}{%- endif -%}
+
+      {%- for col in columns -%}
+        {%- set default_name = relation.schema ~ '_' ~ relation.identifier ~ '_' ~ col ~ '_' ~ index_type ~ '_idx' -%}
+        {%- set index_name = index.get('name', default_name) -%}
+        {%- set qualified_name = relation.schema ~ '.' ~ index_name -%}
+
+        {%- if index_type == 'bloomfilter' -%}
+          {%- set analyzer = index.get('analyzer', none) -%}
+          {% call statement('create_index_' ~ loop.index) %}
+            create bloomfilter index if not exists {{ qualified_name }}
+            on table {{ relation }}({{ col }})
+            {%- if analyzer is not none %} properties('analyzer'='{{ analyzer }}'){%- endif %}
+          {% endcall %}
+
+        {%- elif index_type == 'inverted' -%}
+          {%- set analyzer = index.get('analyzer', none) -%}
+          {% call statement('create_index_' ~ loop.index) %}
+            create inverted index if not exists {{ qualified_name }}
+            on table {{ relation }}({{ col }})
+            {%- if analyzer is not none %} properties('analyzer'='{{ analyzer }}'){%- endif %}
+          {% endcall %}
+
+        {%- else -%}
+          {{ exceptions.raise_compiler_error("Unsupported index type: '" ~ index_type ~ "'. Supported types: bloomfilter, inverted") }}
+        {%- endif -%}
+      {%- endfor -%}
+    {%- endfor -%}
+  {%- endif -%}
+{% endmacro %}
+
+{# ------- END INDEXES ------- #}
+
 {% macro dbt_clickzetta_tblproperties_clause() -%}
   {%- set tblproperties = config.get('tblproperties') -%}
   {%- if tblproperties is not none %}
