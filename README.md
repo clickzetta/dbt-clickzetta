@@ -125,6 +125,15 @@ select * from {{ source('raw', 'orders') }}
 | `vcluster` | ✅ | VCluster name, e.g. `default_ap` |
 | `connect_retries` | ❌ | Connection retry count (default: 3) |
 
+## Known Limitations
+
+| 限制 | 说明 |
+|---|---|
+| `HAVING` 无 `GROUP BY` | ClickZetta 支持无 `GROUP BY` 的 `HAVING`，但 `SELECT` 中必须包含聚合函数。`SELECT` 只有常量或普通列时会报错。写 dbt test 时用子查询 + `WHERE` 替代。 |
+| `SHOW GRANTS` 不支持子查询 | `SHOW GRANTS ON TABLE ...` 不能作为 CTE 或子查询使用，dbt generic test 无法直接验证权限。需用 `run_query` + `{% if execute %}` 的 singular test 方式。 |
+| 动态表不支持 `ALTER` | 动态表创建后不支持修改定义，变更需 `--full-refresh` 重建。 |
+| 物化视图不支持 `CREATE OR REPLACE` | 每次 `dbt run` 会先 `DROP` 再 `CREATE`，期间视图不可查询。 |
+
 ## Development
 
 ```bash

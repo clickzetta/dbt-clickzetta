@@ -313,3 +313,34 @@ REFRESH DYNAMIC TABLE example.customer_stats_dynamic;
 **Q: snapshot 报 schema 不存在**
 
 snapshot 会自动创建 `example_snapshots` schema，确认用户有 `CREATE SCHEMA` 权限。
+
+**Q: 写 `dbt test` 时 `HAVING` 报错 `having clause must be used with group by`**
+
+ClickZetta 对 `HAVING` 有限制：**SELECT 中必须包含聚合函数才能使用无 GROUP BY 的 HAVING**。
+
+```sql
+-- ✅ 支持：SELECT 含聚合函数
+select count(*) as cnt from my_table having count(*) != 10
+
+-- ✅ 支持：SELECT 含聚合函数 + 别名
+select count(*) as cnt from my_table having cnt != 10
+
+-- ❌ 报错：SELECT 只有常量
+select 'check_name' as name, 10 as expected from my_table having expected != 10
+
+-- ❌ 报错：SELECT 只有普通列
+select order_id from my_table having order_id is null
+```
+
+解决方法：用子查询 + `WHERE` 替代：
+
+```sql
+-- ✅ 正确写法
+select check_name, actual, expected
+from (
+    select 'row_count' as check_name, count(*) as actual, 10 as expected
+    from my_table
+) t
+where actual != expected
+```
+
