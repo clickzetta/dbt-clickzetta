@@ -7,7 +7,14 @@
 
 
 {% macro clickzetta__snapshot_string_as_time(timestamp) -%}
-    {%- set result = "to_timestamp('" ~ timestamp ~ "')" -%}
+    {#--
+      Use CAST to TIMESTAMP_NTZ (no timezone) to avoid implicit timezone conversion.
+      This ensures snapshot timestamps are stored and compared as literal values,
+      regardless of the server timezone (Asia/Shanghai by default).
+      Without this, to_timestamp() would interpret the string as Shanghai time,
+      causing 8-hour offsets when source data uses UTC timestamps without timezone markers.
+    --#}
+    {%- set result = "cast('" ~ timestamp ~ "' as timestamp_ntz)" -%}
     {{ return(result) }}
 {%- endmacro %}
 

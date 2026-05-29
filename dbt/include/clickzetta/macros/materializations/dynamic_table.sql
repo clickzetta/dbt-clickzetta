@@ -19,11 +19,22 @@
 
 
 {% macro dynamic_table_get_build_sql(existing_relation, target_relation) %}
-    -- determine the scenario we're in: create, full_refresh, alter, refresh data
+    {#--
+      Scenarios:
+      1. existing_relation is none → CREATE (new table)
+      2. existing_relation exists but is not a dynamic table → REPLACE (type changed)
+      3. existing_relation is a dynamic table → no-op (no ALTER support yet)
+      4. full_refresh → REPLACE
+    --#}
+    {% set full_refresh_mode = should_full_refresh() %}
+
     {% if existing_relation is none %}
         {% set build_sql = clickzetta__create_dynamic_table_as(target_relation, sql) %}
-    {% elif not existing_relation.is_dynamic_table %}
+    {% elif full_refresh_mode or not existing_relation.is_dynamic_table %}
         {% set build_sql = clickzetta__replace_dynamic_table_as(target_relation, sql) %}
+    {% else %}
+        {#-- Dynamic table exists and no full_refresh: no-op (data refreshed by schedule) --#}
+        {% set build_sql = '' %}
     {% endif %}
 
     {% do return(build_sql) %}
@@ -45,6 +56,15 @@
 
     {% call statement(name="main") %}
         {{ build_sql }}
+    {% endcall %}
+
+    {#--
+      After CREATE or REPLACE, trigger an immediate refresh so the table is
+      queryable right away (equivalent to Snowflake's initialize=ON_CREATE).
+      Without this, the table is empty until the first scheduled refresh fires.
+    --#}
+    {% call statement('initialize_refresh') %}
+        refresh dynamic table {{ target_relation }}
     {% endcall %}
 
     {% set should_revoke = should_revoke(existing_relation, full_refresh_mode=True) %}

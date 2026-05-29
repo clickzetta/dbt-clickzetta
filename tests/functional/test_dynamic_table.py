@@ -90,35 +90,35 @@ class TestDynamicTable:
             project.adapter.drop_schema(relation)
 
     def test_dynamic_table(self, project):
-        """动态表：创建、手动刷新、查询行数、full_refresh"""
+        """动态表：创建后自动刷新（initialize=ON_CREATE 语义），可直接查询"""
         run_dbt(["seed"])
 
-        # 创建动态表
+        # 创建动态表（materialization 内部自动执行 REFRESH DYNAMIC TABLE）
         results = run_dbt(["run"])
         assert len(results) == 1
         assert results[0].status == "success"
 
-        # 动态表创建后需要手动刷新才能查询
+        # 创建后无需手动刷新，直接查询
         relation = relation_from_name(project.adapter, "dynamic_table_model")
-        project.run_sql(f"REFRESH DYNAMIC TABLE {relation}")
-
-        # 查询行数
         result = project.run_sql(
             f"select count(*) as num_rows from {relation}", fetch="one"
         )
-        assert result[0] == 3, f"expected 3 rows after refresh, got {result[0]}"
+        assert result[0] == 3, f"expected 3 rows after create+auto-refresh, got {result[0]}"
 
-        # full_refresh 重建
+        # full_refresh 重建（也会自动刷新）
         results = run_dbt(["run", "--full-refresh"])
         assert len(results) == 1
         assert results[0].status == "success"
 
-        # 重建后再次刷新并验证
-        project.run_sql(f"REFRESH DYNAMIC TABLE {relation}")
         result = project.run_sql(
             f"select count(*) as num_rows from {relation}", fetch="one"
         )
-        assert result[0] == 3, f"expected 3 rows after full_refresh + refresh, got {result[0]}"
+        assert result[0] == 3, f"expected 3 rows after full_refresh, got {result[0]}"
+
+        # 第二次 run（表已存在，no-op，不重建）
+        results = run_dbt(["run"])
+        assert len(results) == 1
+        assert results[0].status == "success"
 
 
 class TestDynamicTableWithPartition:
@@ -148,21 +148,19 @@ class TestDynamicTableWithPartition:
             project.adapter.drop_schema(relation)
 
     def test_dynamic_table_with_partition(self, project):
-        """分区动态表：创建、手动刷新、验证分区数据"""
+        """分区动态表：创建后自动刷新，验证分区数据"""
         run_dbt(["seed"])
         results = run_dbt(["run"])
         assert len(results) == 1
         assert results[0].status == "success"
 
+        # 创建后直接查询（无需手动刷新）
         relation = relation_from_name(project.adapter, "dynamic_table_partitioned")
-        project.run_sql(f"REFRESH DYNAMIC TABLE {relation}")
-
         result = project.run_sql(
             f"select count(*) from {relation}", fetch="one"
         )
         assert result[0] == 3, f"expected 3 rows, got {result[0]}"
 
-        # 验证分区数据
         ds1 = project.run_sql(
             f"select count(*) from {relation} where ds = '20240101'", fetch="one"
         )[0]
