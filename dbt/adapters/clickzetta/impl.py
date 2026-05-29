@@ -89,10 +89,8 @@ class ClickZettaAdapter(SQLAdapter):
         return result
 
     def get_catalog(self, relation_configs, used_schemas):
-        """Build catalog using SHOW TABLES + DESCRIBE TABLE (INFORMATION_SCHEMA not available)."""
+        """Build catalog using SHOW TABLES + DESCRIBE TABLE + INFORMATION_SCHEMA."""
         catalog_rows = []
-        # used_schemas may contain (None, schema) and (workspace, schema) for the same schema.
-        # Collect all unique schemas with their associated databases.
         schema_databases: Dict[str, Set[Optional[str]]] = {}
         for database, schema in used_schemas:
             if schema not in schema_databases:
@@ -101,17 +99,33 @@ class ClickZettaAdapter(SQLAdapter):
 
         with self.connection_named("catalog"):
             for schema, databases in schema_databases.items():
+                # Fetch stats (row_count, bytes, last_modify_time) from INFORMATION_SCHEMA
+                stats_map: Dict[str, Dict] = {}
+                try:
+                    _, info_table = self.execute(
+                        f"SELECT table_name, row_count, bytes, last_modify_time "
+                        f"FROM information_schema.tables WHERE table_schema = '{schema}'",
+                        fetch=True,
+                    )
+                    for info_row in info_table.rows:
+                        stats_map[info_row["table_name"]] = {
+                            "row_count": info_row["row_count"],
+                            "bytes": info_row["bytes"],
+                            "last_modify_time": str(info_row["last_modify_time"]) if info_row["last_modify_time"] else None,
+                        }
+                except Exception as e:
+                    logger.debug(f"Could not fetch INFORMATION_SCHEMA for {schema}: {e}")
+
                 try:
                     _, tables_table = self.execute(f"SHOW TABLES IN {schema}", fetch=True)
                     for tbl_row in tables_table.rows:
                         tbl_name = tbl_row["table_name"]
                         tbl_type = "view" if tbl_row["is_view"] else "table"
+                        stats = stats_map.get(tbl_name, {})
                         try:
                             _, desc_table = self.execute(
                                 f"DESCRIBE TABLE {schema}.{tbl_name}", fetch=True
                             )
-                            # Emit one row per database entry so both nodes (database=None)
-                            # and sources (database=workspace) can match the catalog.
                             for database in databases:
                                 for idx, col_row in enumerate(desc_table.rows):
                                     catalog_rows.append({
@@ -123,18 +137,18 @@ class ClickZettaAdapter(SQLAdapter):
                                         "column_index": idx,
                                         "column_type": col_row["data_type"],
                                         "column_comment": col_row.get("comment", ""),
-                                        "stats:row_count:label": None,
-                                        "stats:row_count:value": None,
-                                        "stats:row_count:description": None,
-                                        "stats:row_count:include": False,
-                                        "stats:bytes:label": None,
-                                        "stats:bytes:value": None,
-                                        "stats:bytes:description": None,
-                                        "stats:bytes:include": False,
-                                        "stats:last_modified:label": None,
-                                        "stats:last_modified:value": None,
-                                        "stats:last_modified:description": None,
-                                        "stats:last_modified:include": False,
+                                        "stats:row_count:label": "Row Count",
+                                        "stats:row_count:value": stats.get("row_count"),
+                                        "stats:row_count:description": "Approximate row count",
+                                        "stats:row_count:include": stats.get("row_count") is not None,
+                                        "stats:bytes:label": "Approximate Size",
+                                        "stats:bytes:value": stats.get("bytes"),
+                                        "stats:bytes:description": "Approximate size in bytes",
+                                        "stats:bytes:include": stats.get("bytes") is not None,
+                                        "stats:last_modified:label": "Last Modified",
+                                        "stats:last_modified:value": stats.get("last_modify_time"),
+                                        "stats:last_modified:description": "Last modification time",
+                                        "stats:last_modified:include": stats.get("last_modify_time") is not None,
                                     })
                         except Exception as e:
                             logger.debug(f"Could not describe {schema}.{tbl_name}: {e}")
