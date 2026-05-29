@@ -1,3 +1,5 @@
+-- Vector index example: demonstrates CREATE VECTOR INDEX on a table column.
+-- Uses a computed embedding column (simulated as an array of floats from order data).
 {{ config(
     materialized='table',
     indexes=[
@@ -5,5 +7,9 @@
     ]
 ) }}
 
-select id, embedding
-from example.vector_test_src
+select
+    order_id as id,
+    -- Simulate a 3-dimensional embedding vector from order features
+    array(cast(amount as float), cast(length(status) as float), cast(length(region) as float)) as embedding
+from {{ ref('fct_orders_incremental') }}
+

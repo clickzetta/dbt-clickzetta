@@ -211,7 +211,7 @@ class ClickZettaAdapter(SQLAdapter):
 
         return [
             ClickZettaColumn(
-                table_database=None,
+                table_database=relation.database,
                 table_schema=relation.schema,
                 table_name=relation.name,
                 column=column["column_name"],

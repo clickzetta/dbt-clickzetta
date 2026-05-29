@@ -154,9 +154,10 @@ class TestClickZettaAdapter(unittest.TestCase):
     def test_relation_with_database(self):
         config = self._get_target_http(self.project_cfg)
         adapter = ClickZettaAdapter(config, MP_CONTEXT)
-        # database is accepted but not rendered (IncludePolicy.database=False)
+        # workspace maps to database; render() includes it as workspace.schema.table
         rel = adapter.Relation.create(schema="dbt", identifier="dbt_table_1")
-        self.assertNotIn(".", rel.render().split("dbt")[0])  # no database prefix
+        self.assertEqual(rel.render(), "dbt.dbt_table_1")
         rel_with_db = adapter.Relation.create(database="db", schema="dbt", identifier="dbt_table_1")
-        # render should not include database
-        self.assertNotIn("db.", rel_with_db.render())
+        # render should include database (workspace) prefix
+        self.assertIn("db.", rel_with_db.render())
+        self.assertEqual(rel_with_db.render(), "db.dbt.dbt_table_1")

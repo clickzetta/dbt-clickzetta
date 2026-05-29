@@ -15,7 +15,7 @@ class ClickZettaQuotePolicy(Policy):
 
 @dataclass
 class ClickZettaIncludePolicy(Policy):
-    database: bool = False
+    database: bool = True
     schema: bool = True
     identifier: bool = True
 
