@@ -182,23 +182,31 @@
   {{ clickzetta__use_vcluster(vcluster) }}
 {% endmacro %}
 
-{# ------- UNDROP ------- #}
+{# ------- UNDROP / DROP ------- #}
 
 {#
-  Recover a recently dropped table within the retention period.
+  Recover a recently dropped object within the retention period.
+  Supports: table, dynamic table, materialized view, table stream.
+  All use the same UNDROP TABLE syntax regardless of original object type.
+  Does NOT support: view, external table, schema, index, function, etc.
 
   Usage:
-    dbt run-operation undrop_table --args '{relation: example.my_table}'
+    dbt run-operation undrop --args '{relation: example.my_table}'
 
   To list recently dropped tables first:
     dbt run-operation show_tables_history --args '{schema: example}'
 #}
-{% macro undrop_table(relation) %}
+{% macro undrop(relation) %}
   {% set sql %}undrop table {{ relation }}{% endset %}
   {% do run_query(sql) %}
   {% if execute %}
-    {{ log("Recovered table: " ~ relation, info=true) }}
+    {{ log("Recovered: " ~ relation, info=true) }}
   {% endif %}
+{% endmacro %}
+
+{# Keep undrop_table as alias for backwards compatibility #}
+{% macro undrop_table(relation) %}
+  {{ undrop(relation) }}
 {% endmacro %}
 
 {% macro show_tables_history(schema) %}
@@ -211,7 +219,27 @@
   {% endif %}
 {% endmacro %}
 
-{# ------- END INDEXES ------- #}
+{#
+  Drop a relation by type. Useful for manual cleanup via run-operation.
+  type: table | view | dynamic_table | materialized_view | stream
+
+  Usage:
+    dbt run-operation drop_relation --args '{relation: example.my_table, type: table}'
+    dbt run-operation drop_relation --args '{relation: example.my_view, type: view}'
+
+  Note: table, dynamic_table, materialized_view, and stream support UNDROP recovery.
+        view, external table, schema do NOT support recovery.
+#}
+{% macro drop_relation(relation, type='table') %}
+  {%- set drop_type = type | replace('_', ' ') -%}
+  {% set sql %}drop {{ drop_type }} if exists {{ relation }}{% endset %}
+  {% do run_query(sql) %}
+  {% if execute %}
+    {{ log("Dropped " ~ type ~ ": " ~ relation, info=true) }}
+  {% endif %}
+{% endmacro %}
+
+{# ------- END UNDROP / DROP ------- #}
 
 {% macro dbt_clickzetta_tblproperties_clause() -%}
   {%- set tblproperties = config.get('tblproperties') -%}

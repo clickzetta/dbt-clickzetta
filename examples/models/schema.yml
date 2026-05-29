@@ -134,3 +134,19 @@ models:
         data_tests:
           - not_null
           - unique
+
+  - name: orders_vector_index
+    description: "演示 Vector Index：对 embedding 列创建余弦距离向量索引，适合 AI 语义搜索场景"
+    columns:
+      - name: id
+        data_tests:
+          - not_null
+          - unique
+
+  - name: fct_orders_delete_insert
+    description: "演示 delete+insert 增量策略：先删除匹配行再插入，适合无主键的分区替换场景"
+    columns:
+      - name: order_id
+        data_tests:
+          - not_null
+          - unique

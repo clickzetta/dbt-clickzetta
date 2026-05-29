@@ -275,6 +275,89 @@ REFRESH MATERIALIZED VIEW example.regional_daily_mv;
 
 ---
 
+## 新功能详解
+
+### Vector Index（向量索引）
+
+`orders_vector_index` 演示向量索引，适合 AI/语义搜索场景：
+
+```sql
+{{ config(
+    materialized='table',
+    indexes=[
+        {'type': 'vector', 'columns': ['embedding'],
+         'distance_function': 'cosine_distance',  -- cosine_distance / l2_distance / dot_product
+         'scalar_type': 'f32'}                    -- f32 / f16 / b1
+    ]
+) }}
+```
+
+支持的距离函数：`cosine_distance`（语义相似度）、`l2_distance`（图像特征）、`dot_product`（已归一化向量）、`jaccard_distance`、`hamming_distance`（二进制向量）。
+
+### delete+insert 增量策略
+
+`fct_orders_delete_insert` 演示 delete+insert 策略，先删除匹配行再插入，适合无主键的分区替换场景：
+
+```sql
+{{ config(
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='order_id'
+) }}
+```
+
+与 `merge` 的区别：merge 是单条 MERGE INTO 语句；delete+insert 是先 DELETE 再 INSERT，在某些场景下性能更好，且不依赖 MERGE 语法。
+
+### VCluster per-model 切换
+
+为单个模型指定计算集群，实现大小模型资源隔离：
+
+```sql
+{{ config(
+    materialized='table',
+    vcluster='large_ap'   -- 该模型运行时切换到 large_ap 集群
+) }}
+```
+
+### persist_docs 列注释
+
+在 `schema.yml` 中为列添加 `description`，并在模型 config 中开启 `persist_docs`，dbt 会自动将注释写入 Lakehouse 表的列元数据：
+
+```yaml
+- name: dim_customers
+  config:
+    persist_docs:
+      columns: true
+  columns:
+    - name: customer_id
+      description: "客户唯一标识"
+```
+
+运行后可通过 `DESCRIBE TABLE example.dim_customers` 验证注释已写入。
+
+### 运维宏（run-operation）
+
+```bash
+# 小文件合并（高频增量写入后使用）
+dbt run-operation optimize_table --args '{relation: example.fct_orders_incremental}' --profiles-dir .
+
+# 按分区合并（只合并近 7 天）
+dbt run-operation optimize_table --args '{relation: example.daily_revenue, where: "dt >= current_date() - interval 7 days"}' --profiles-dir .
+
+# 查看可恢复的已删除对象
+dbt run-operation show_tables_history --args '{schema: example}' --profiles-dir .
+
+# 恢复误删对象（支持普通表、动态表、物化视图、Table Stream）
+dbt run-operation undrop --args '{relation: example.my_table}' --profiles-dir .
+
+# 删除对象（type: table | view | dynamic_table | materialized_view | stream）
+dbt run-operation drop_relation --args '{relation: example.my_table, type: table}' --profiles-dir .
+```
+
+> **注意**：`undrop` 支持恢复普通表、动态表、物化视图、Table Stream，统一使用 `UNDROP TABLE` 语法。视图、外部表、Schema 不支持恢复。
+
+---
+
 ## 清理测试对象
 
 示例运行完毕后，执行以下命令清理所有创建的对象：
