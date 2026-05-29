@@ -7,6 +7,7 @@
                                                 schema=schema,
                                                 database=database,
                                                 type='table') -%}
+  {%- set grant_config = config.get('grants') -%}
 
   {{ run_hooks(pre_hooks) }}
 
@@ -39,6 +40,7 @@
   {%- endif -%}
 
   {% set should_revoke = should_revoke(old_relation, full_refresh_mode=True) %}
+  {% do apply_grants(target_relation, grant_config, should_revoke=should_revoke) %}
 
   {% do persist_docs(target_relation, model) %}
 

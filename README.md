@@ -61,7 +61,7 @@ dbt docs generate
 | Clustered tables | ✅ |
 | Python models | ✅ |
 | `on_schema_change` | ✅ (append_new_columns, sync_all_columns) |
-| `grants` | ❌ |
+| `grants` | ✅ |
 
 ## Incremental Strategies
 

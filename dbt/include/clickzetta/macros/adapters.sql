@@ -1,3 +1,53 @@
+{# ------- GRANTS ------- #}
+
+{% macro clickzetta__copy_grants() %}
+    {{ return(False) }}
+{% endmacro %}
+
+{# ClickZetta requires "ON TABLE schema.table", not just "ON schema.table" #}
+{% macro clickzetta__get_show_grant_sql(relation) %}
+    {%- set rel_type = relation.type | upper if relation.type else 'TABLE' -%}
+    show grants on {{ rel_type }} {{ relation.render() }}
+{% endmacro %}
+
+{# ClickZetta requires "GRANT priv ON TABLE schema.table TO ROLE/USER grantee" #}
+{% macro clickzetta__get_grant_sql(relation, privilege, grantees) %}
+    {%- set rel_type = relation.type | upper if relation.type else 'TABLE' -%}
+    {% set grant_sqls = [] %}
+    {% for grantee in grantees %}
+        {% set grantee_type = "USER" if grantee.startswith("user:") else "ROLE" %}
+        {% set grantee_name = grantee[5:] if grantee.startswith("user:") else grantee %}
+        {% do grant_sqls.append(
+            "grant " ~ privilege ~ " on " ~ rel_type ~ " " ~ relation.render() ~ " to " ~ grantee_type ~ " " ~ grantee_name
+        ) %}
+    {% endfor %}
+    {{ return(grant_sqls | join("; ")) }}
+{% endmacro %}
+
+{% macro clickzetta__get_revoke_sql(relation, privilege, grantees) %}
+    {%- set rel_type = relation.type | upper if relation.type else 'TABLE' -%}
+    {% set revoke_sqls = [] %}
+    {% for grantee in grantees %}
+        {% set grantee_type = "USER" if grantee.startswith("user:") else "ROLE" %}
+        {% set grantee_name = grantee[5:] if grantee.startswith("user:") else grantee %}
+        {% do revoke_sqls.append(
+            "revoke " ~ privilege ~ " on " ~ rel_type ~ " " ~ relation.render() ~ " from " ~ grantee_type ~ " " ~ grantee_name
+        ) %}
+    {% endfor %}
+    {{ return(revoke_sqls | join("; ")) }}
+{% endmacro %}
+
+{# ClickZetta does not support multiple DCL statements in one call #}
+{% macro clickzetta__call_dcl_statements(dcl_statement_list) %}
+    {% for dcl_statement in dcl_statement_list %}
+        {% call statement('grants') %}
+            {{ dcl_statement }}
+        {% endcall %}
+    {% endfor %}
+{% endmacro %}
+
+{# ------- END GRANTS ------- #}
+
 {% macro dbt_clickzetta_tblproperties_clause() -%}
   {%- set tblproperties = config.get('tblproperties') -%}
   {%- if tblproperties is not none %}

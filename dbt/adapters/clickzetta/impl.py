@@ -280,3 +280,39 @@ class ClickZettaAdapter(SQLAdapter):
 
     def valid_incremental_strategies(self):
         return ["append", "merge", "insert_overwrite"]
+
+    def standardize_grants_dict(self, grants_table: agate.Table) -> Dict[str, List[str]]:
+        # SHOW GRANTS ON TABLE returns columns:
+        #   granted_type, privilege, conditions, granted_on, object_name,
+        #   granted_to, grantee_name, grantor_name, grant_option, granted_time
+        # privilege values look like "SELECT TABLE", "ALL", "INSERT TABLE" etc.
+        # granted_type is "PRIVILEGE" for direct grants, "OBJECT_HIERARCHY" for inherited — skip inherited.
+        # grantee_name is prefixed with workspace, e.g. "quick_start.my_role" — strip the prefix.
+        col_names = [c.lower() for c in grants_table.column_names]
+
+        if "privilege" not in col_names or "grantee_name" not in col_names:
+            return {}
+
+        grants: Dict[str, List[str]] = {}
+        for row in grants_table.rows:
+            row_dict = dict(zip(col_names, row))
+
+            # only process direct grants, skip inherited hierarchy grants
+            if row_dict.get("granted_type", "").upper() != "PRIVILEGE":
+                continue
+
+            # normalize "SELECT TABLE" -> "select", "ALL" -> "all"
+            raw_priv = row_dict["privilege"].upper()
+            privilege = raw_priv.split()[0].lower()
+
+            # strip workspace prefix from grantee: "quick_start.my_role" -> "my_role"
+            raw_grantee = row_dict["grantee_name"]
+            grantee = raw_grantee.split(".", 1)[-1] if "." in raw_grantee else raw_grantee
+
+            # prefix USER grantees so grant/revoke macros can distinguish ROLE vs USER
+            granted_to = row_dict.get("granted_to", "ROLE").upper()
+            if granted_to == "USER":
+                grantee = f"user:{grantee}"
+
+            grants.setdefault(privilege, []).append(grantee)
+        return grants

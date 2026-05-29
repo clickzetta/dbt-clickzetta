@@ -13,6 +13,7 @@
   {%- set language = model['language'] -%}
   {%- set on_schema_change = incremental_validate_on_schema_change(config.get('on_schema_change'), default='ignore') -%}
   {%- set incremental_predicates = config.get('predicates', none) or config.get('incremental_predicates', none) -%}
+  {%- set grant_config = config.get('grants') -%}
   {%- set target_relation = this -%}
   {%- set existing_relation = load_relation(this) -%}
   {%- set tmp_relation = make_temp_relation(this) -%}
@@ -72,6 +73,7 @@
   {%- endif -%}
 
   {% set should_revoke = should_revoke(existing_relation, full_refresh_mode) %}
+  {% do apply_grants(target_relation, grant_config, should_revoke=should_revoke) %}
 
   {% do persist_docs(target_relation, model) %}
 
