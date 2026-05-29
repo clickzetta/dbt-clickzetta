@@ -43,3 +43,6 @@ test.env
 
 # other
 dbt-integration-tests
+
+# local profiles with real credentials (never commit)
+examples/profiles.yml
