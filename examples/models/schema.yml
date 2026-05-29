@@ -77,3 +77,30 @@ models:
         tests:
           - not_null
           - unique
+
+  - name: customer_stats_dynamic
+    description: "动态表：每 5 分钟自动刷新的客户统计"
+    columns:
+      - name: customer_id
+        tests:
+          - not_null
+          - unique
+      - name: order_count
+        tests:
+          - not_null
+      - name: total_amount
+        tests:
+          - not_null
+
+  - name: regional_daily_mv
+    description: "物化视图：区域日营收"
+    columns:
+      - name: region
+        tests:
+          - not_null
+      - name: dt
+        tests:
+          - not_null
+      - name: revenue
+        tests:
+          - not_null
