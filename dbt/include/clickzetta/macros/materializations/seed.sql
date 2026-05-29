@@ -57,11 +57,12 @@
       {% set sql %}
           insert into {{ this.render() }} values
           {% for row in chunk -%}
-              ({%- for col_name in agate_table.column_names -%}
-                  {%- set inferred_type = adapter.convert_type(agate_table, loop.index0) -%}
+              ({%- for i in range(agate_table.column_names | length) -%}
+                  {%- set col_name = agate_table.column_names[i] -%}
+                  {%- set inferred_type = adapter.convert_type(agate_table, i) -%}
                   {%- set type = column_override.get(col_name, inferred_type) -%}
-                  {%- set col_val = row[loop.index0] -%}
-                  {%- set prefix = col_inline_prefix[loop.index0] -%}
+                  {%- set col_val = row[i] -%}
+                  {%- set prefix = col_inline_prefix[i] -%}
                   {%- if prefix -%}
                       {%- if col_val is none or col_val == '' -%}
                           null
