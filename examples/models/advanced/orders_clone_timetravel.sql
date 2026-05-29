@@ -2,12 +2,12 @@
 -- Use case: data recovery, historical version comparison
 --
 -- PREREQUISITE: The source table must have existed for at least 1 hour before
--- running this model. Run `dbt run --select fct_orders_partitioned` first,
--- wait 1 hour, then run this model separately:
---   dbt run --select orders_clone_timetravel
+-- running this model. Run fct_orders_partitioned first, wait 1 hour, then:
+--   dbt run --profiles-dir . --select orders_clone_timetravel
 --
--- This model is disabled by default (enabled: false) to prevent it from
--- failing in a fresh environment where the source table has no history yet.
+-- This model is disabled by default. To run it:
+--   1. Set enabled=true below (or pass --vars '{"enable_timetravel": true}')
+--   2. Ensure fct_orders_partitioned has existed for >= 1 hour
 {{ config(
     materialized='clone',
     source=target.database ~ '.' ~ target.schema ~ '.fct_orders_partitioned',

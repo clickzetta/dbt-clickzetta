@@ -277,6 +277,33 @@ REFRESH MATERIALIZED VIEW example.regional_daily_mv;
 
 ## 新功能详解
 
+### Clone（零拷贝克隆）
+
+`orders_clone` 演示零拷贝克隆，创建速度极快，不占用额外存储：
+
+```bash
+# 包含在默认 dbt run 里，直接运行即可
+dbt run --profiles-dir . --select orders_clone
+```
+
+`orders_clone_timetravel` 演示 Time Travel 克隆（克隆某个历史时间点的数据）。**此模型默认 disabled**，因为它要求源表在目标时间点之前已存在至少 1 小时，无法在全量 `dbt run` 里自动通过。
+
+单独运行步骤：
+
+```bash
+# 第一步：确保源表已存在
+dbt run --profiles-dir . --select fct_orders_partitioned
+
+# 第二步：等待至少 1 小时（让源表积累历史版本）
+
+# 第三步：在 orders_clone_timetravel.sql 里把 enabled=false 改成 enabled=true
+
+# 第四步：运行
+dbt run --profiles-dir . --select orders_clone_timetravel
+```
+
+> Time Travel 克隆依赖 ClickZetta 的数据保留机制，目标时间点必须在 `data_retention_days` 范围内。
+
 ### Vector Index（向量索引）
 
 `orders_vector_index` 演示向量索引，适合 AI/语义搜索场景：
