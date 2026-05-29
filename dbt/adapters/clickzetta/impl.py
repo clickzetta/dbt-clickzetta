@@ -16,6 +16,7 @@ from dbt.adapters.base.impl import catch_as_completed, ConstraintSupport
 from dbt.adapters.clickzetta import ClickZettaConnectionManager
 from dbt.adapters.clickzetta import ClickZettaRelation
 from dbt.adapters.clickzetta import ClickZettaColumn
+from dbt.adapters.clickzetta.relation import ClickZettaRelationType
 from dbt.contracts.graph.manifest import Manifest
 from dbt.contracts.graph.nodes import ConstraintType
 from dbt.adapters.base import BaseRelation, SchemaSearchMap, RelationType
@@ -202,7 +203,11 @@ class ClickZettaAdapter(SQLAdapter):
         # Convert the Row to a dict
         dict_rows = [dict(zip(row._keys, row._values)) for row in raw_rows]
 
-        rows = [row for row in dict_rows if not row["column_name"].startswith("#")]
+        rows = [
+            row for row in dict_rows
+            if not row["column_name"].startswith("#")
+            and not row["column_name"].startswith("__")  # filter stream system columns
+        ]
 
         return [
             ClickZettaColumn(
@@ -216,6 +221,12 @@ class ClickZettaAdapter(SQLAdapter):
         ]
 
     def get_columns_in_relation(self, relation: BaseRelation) -> List[ClickZettaColumn]:
+        # Streams only expose system columns (__change_type etc.) via SHOW COLUMNS.
+        # These are reserved names that ClickZetta rejects in INSERT/SELECT statements.
+        # Return empty list so dbt treats the stream as having no known columns,
+        # which prevents system columns from being injected into generated SQL.
+        if getattr(relation, 'type', None) == ClickZettaRelationType.Stream:
+            return []
         columns = []
         try:
             rows: AttrDict = self.execute_macro(
