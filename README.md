@@ -130,9 +130,9 @@ select * from {{ source('raw', 'orders') }}
 | 限制 | 说明 |
 |---|---|
 | `HAVING` 无 `GROUP BY` | ClickZetta 支持无 `GROUP BY` 的 `HAVING`，但 `SELECT` 中必须包含聚合函数。`SELECT` 只有常量或普通列时会报错。写 dbt test 时用子查询 + `WHERE` 替代。 |
-| `SHOW GRANTS` 不支持子查询 | `SHOW GRANTS ON TABLE ...` 不能作为 CTE 或子查询使用，dbt generic test 无法直接验证权限。需用 `run_query` + `{% if execute %}` 的 singular test 方式。 |
-| 动态表不支持 `ALTER` | 动态表创建后不支持修改定义，变更需 `--full-refresh` 重建。 |
-| 物化视图不支持 `CREATE OR REPLACE` | 每次 `dbt run` 会先 `DROP` 再 `CREATE`，期间视图不可查询。 |
+| `SHOW GRANTS` 在 dbt generic test 中不可用 | dbt generic test 会将 SQL 包裹在 `select count(*) from (...)` 中，而 `SHOW GRANTS` 不支持被这种方式包装。需用 `run_query` + `{% if execute %}` 的 singular test 方式验证权限。注意：ClickZetta 大多数 `SHOW` 命令支持子查询，`SHOW GRANTS` 是例外。 |
+| 动态表不支持修改 SQL 定义 | 支持 `ALTER DYNAMIC TABLE` 的 suspend / resume / rename column / set comment，但不支持修改查询 SQL 或刷新间隔。需变更定义时使用 `dbt run --full-refresh` 重建。 |
+| 物化视图 `CREATE OR REPLACE` 有限制 | 不能直接 `CREATE OR REPLACE MATERIALIZED VIEW`，需要特定参数组合才能使用。dbt 的处理方式是先 `DROP` 再 `CREATE`，期间视图短暂不可查询。 |
 
 ## Development
 
