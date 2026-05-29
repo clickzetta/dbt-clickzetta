@@ -229,6 +229,12 @@ where updated_at > (select max(updated_at) from {{ this }})
 > **注意**：`dbt run` 时如果动态表已存在则跳过（no-op），由 ClickZetta 自动刷新。
 > 使用 `dbt run --full-refresh` 强制重建。
 
+需要立即刷新时，使用内置的 `refresh_dynamic_table` macro：
+
+```bash
+dbt run-operation refresh_dynamic_table --args '{model_name: customer_stats_dynamic}' --profiles-dir .
+```
+
 ### 物化视图
 
 `regional_daily_mv` 将查询结果持久化，查询速度快，但需要手动触发刷新：
