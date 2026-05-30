@@ -45,7 +45,7 @@
 {% macro dynamic_table_execute_no_op(relation) %}
     {% do store_raw_result(
         name="main",
-        message="skip " ~ relation,
+        message="no-op — dynamic table exists and refreshes on schedule: " ~ relation,
         code="skip",
         rows_affected="-1"
     ) %}

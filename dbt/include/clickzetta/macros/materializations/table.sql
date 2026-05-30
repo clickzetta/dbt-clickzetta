@@ -1,4 +1,4 @@
-{% materialization table, adapter = 'clickzetta', supported_languages=['sql', 'python'] %}
+{% materialization table, adapter = 'clickzetta', supported_languages=['sql'] %}
   {%- set language = model['language'] -%}
   {%- set identifier = model['alias'] -%}
 
