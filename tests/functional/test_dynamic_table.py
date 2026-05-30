@@ -404,7 +404,7 @@ class TestDynamicTableDownstream:
 {{ config(
     materialized='dynamic_table',
     refresh_interval='1 minutes',
-    refresh_vc='default_ap'
+    refresh_vc='default'
 ) }}
 select id, name, amount * 2 as doubled_amount
 from {{ source('raw', 'raw_source') }}
@@ -415,7 +415,7 @@ from {{ source('raw', 'raw_source') }}
 {{ config(
     materialized='dynamic_table',
     refresh_interval='1 minutes',
-    refresh_vc='default_ap'
+    refresh_vc='default'
 ) }}
 select name, sum(doubled_amount) as total
 from {{ ref('dt_intermediate') }}

@@ -3,7 +3,7 @@
 {{ config(
     materialized='dynamic_table',
     refresh_interval='5 minutes',
-    refresh_vc='default_ap'
+    refresh_vc='default'
 ) }}
 
 select

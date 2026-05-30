@@ -249,7 +249,7 @@ where updated_at > (select max(updated_at) from {{ this }})
 {{ config(
     materialized='dynamic_table',
     refresh_interval='5 minutes',  -- 刷新间隔，支持 minutes / hours
-    refresh_vc='default_ap'        -- 指定刷新使用的 vcluster
+    refresh_vc='default'        -- 指定刷新使用的 vcluster
 ) }}
 ```
 
