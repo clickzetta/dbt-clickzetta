@@ -11,10 +11,14 @@ tests/
 │   ├── test_macros.py           # Core Jinja macros (create_table_as, dynamic_table)
 │   └── test_macros_extended.py  # Extended macro tests (drop/rename, indexes, strategies)
 └── functional/                  # Functional tests — require a real ClickZetta connection
-    ├── test_basic.py
-    ├── test_data_correctness.py
-    └── test_dynamic_table.py
+    ├── test_basic.py            # dbt-core base test suite (materializations, incremental, snapshots)
+    ├── test_data_correctness.py # Data correctness: merge, append, insert_overwrite, NULL handling
+    ├── test_dynamic_table.py    # Dynamic table materialization
+    └── test_grants.py           # Grants / RBAC
 ```
+
+The `examples/` directory is a separate runnable dbt project that serves as an integration
+test suite. It is not part of the pytest test suite.
 
 ## Running Tests
 
@@ -27,21 +31,32 @@ pytest tests/unit/
 
 ### Functional tests (requires connection)
 
-Functional tests run against the `examples/` dbt project. Set up a connection first:
+Functional tests use dbt-core's pytest adapter test framework. Set environment variables:
 
 ```bash
-cp examples/profiles.yml.example examples/profiles.yml
-# Fill in your ClickZetta credentials
+export CLICKZETTA_TEST_SERVICE=cn-shanghai-alicloud.api.clickzetta.com
+export CLICKZETTA_TEST_INSTANCE=your_instance
+export CLICKZETTA_TEST_WORKSPACE=your_workspace
+export CLICKZETTA_TEST_USERNAME=your_username
+export CLICKZETTA_TEST_PASSWORD=your_password
+export CLICKZETTA_TEST_VCLUSTER=default_ap
+export CLICKZETTA_TEST_SCHEMA=dbt_test
+
+pytest tests/functional/
 ```
 
-Then run the full examples pipeline:
+### Examples project (integration test)
+
+The `examples/` project is a complete dbt project that exercises all adapter features
+end-to-end. Run it manually:
 
 ```bash
 cd examples
+cp profiles.yml.example profiles.yml   # fill in credentials
 dbt seed --profiles-dir . --full-refresh
 dbt run --profiles-dir .
-dbt snapshot --profiles-dir .   # required for assert_snapshot_integrity
-dbt test --profiles-dir .
+dbt snapshot --profiles-dir .          # required for assert_snapshot_integrity
+dbt test --profiles-dir .              # should pass 49/49
 ```
 
 ## Unit Test Coverage
@@ -58,7 +73,8 @@ dbt test --profiles-dir .
 
 ### Unit tests for Python methods
 
-Add to `test_adapter.py`. Use `_get_target_http()` to build a config, then instantiate `ClickZettaAdapter(config, MP_CONTEXT)`.
+Add to `test_adapter.py`. Use `_get_target_http()` to build a config, then instantiate
+`ClickZettaAdapter(config, MP_CONTEXT)`.
 
 ### Unit tests for Jinja macros
 
@@ -81,12 +97,11 @@ def test_my_macro(self):
     self.assertIn("expected sql fragment", " ".join(captured))
 ```
 
-### Functional tests
-
-The `examples/` project is the functional test suite. Add new models, seeds, or singular tests there. The full pipeline (seed → run → snapshot → test) must pass with 0 errors.
-
 ## Known Limitations
 
-- **Snapshot integrity test** (`assert_snapshot_integrity`) requires a two-round seed+snapshot setup to produce historical records. See `examples/README.md` for the manual steps.
-- **`orders_clone_timetravel`** is disabled by default (`enabled=false`) — it requires the source table to have existed for ≥1 hour. See `examples/README.md` for how to run it manually.
-- **`workspace_analyst` role** must exist in your ClickZetta workspace for `assert_grants_regional_revenue` to pass. Override with `--vars '{"grant_role": "your_role"}'`.
+- **Snapshot integrity test** (`assert_snapshot_integrity`) requires a two-round seed+snapshot
+  setup to produce historical records. See `examples/README.md` for the manual steps.
+- **`orders_clone_timetravel`** is disabled by default (`enabled=false`) — it requires the
+  source table to have existed for ≥1 hour. See `examples/README.md` for how to run it manually.
+- **`workspace_analyst` role** must exist in your ClickZetta workspace for
+  `assert_grants_regional_revenue` to pass. Override with `--vars '{"grant_role": "your_role"}'`.
