@@ -454,7 +454,6 @@
   {%- set partition_by_lower = partition_by | map('lower') | list -%}
 
   {%- set tmp_view = make_temp_relation(relation) -%}
-  {%- set tmp_view = tmp_view.include(database=false, schema=true) -%}
 
   {%- call statement('create_tmp_view_for_partition') -%}
     create or replace view {{ tmp_view }} as {{ compiled_code }}

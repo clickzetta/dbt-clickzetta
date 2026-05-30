@@ -19,11 +19,6 @@
   {%- set existing_relation = load_relation(this) -%}
   {%- set tmp_relation = make_temp_relation(this) -%}
 
-  {#-- for SQL model we will create temp view that doesn't have database and schema --#}
-  {%- if language == 'sql'-%}
-    {%- set tmp_relation = tmp_relation.include(database=false, schema=true) -%}
-  {%- endif -%}
-
   {%- if vcluster -%}{{ clickzetta__use_vcluster(vcluster) }}{%- endif -%}
 
   {#-- Set Overwrite Mode --#}
@@ -68,9 +63,14 @@
     {%- call statement('main') -%}
       {{ dbt_clickzetta_get_incremental_sql(strategy, tmp_relation, target_relation, existing_relation, unique_key, incremental_predicates) }}
     {%- endcall -%}
+    {#-- SQL tmp_relation is a view (ClickZetta has no temp tables/views); Python is a table --#}
     {%- if language == 'python' -%}
-      {% call statement('drop_relation') -%}
+      {% call statement('drop_tmp_relation') -%}
         drop table if exists {{ tmp_relation }}
+      {%- endcall %}
+    {%- else -%}
+      {% call statement('drop_tmp_relation') -%}
+        drop view if exists {{ tmp_relation }}
       {%- endcall %}
     {%- endif -%}
   {%- endif -%}
