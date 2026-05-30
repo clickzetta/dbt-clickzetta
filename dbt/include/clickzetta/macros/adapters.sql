@@ -654,6 +654,9 @@
     relation.type uses underscores (dynamic_table, materialized_view) but SQL needs spaces.
     When type is None (e.g. unit test fixture cleanup), try all object types —
     ClickZetta's IF EXISTS makes the no-op cases silent.
+
+    When type is 'table', also try DROP VIEW — dbt unit test fixtures are created as
+    VIEWs in ClickZetta (no temp table support) but dbt passes type='table'.
   --#}
   {%- if relation.type is none or relation.type | string == 'None' -%}
     {% call statement('drop_relation_table', auto_begin=False) -%}
@@ -667,6 +670,14 @@
     {%- endcall %}
     {% call statement('drop_relation_materialized_view', auto_begin=False) -%}
       drop materialized view if exists {{ relation }}
+    {%- endcall %}
+  {%- elif relation.type | string == 'table' -%}
+    {#-- Try VIEW first: unit test fixtures are VIEWs even when type='table' (no temp table support) --#}
+    {% call statement('drop_relation_view', auto_begin=False) -%}
+      drop view if exists {{ relation }}
+    {%- endcall %}
+    {% call statement('drop_relation_table', auto_begin=False) -%}
+      drop table if exists {{ relation }}
     {%- endcall %}
   {%- else -%}
     {%- set drop_type = relation.type | string | replace('_', ' ') -%}
