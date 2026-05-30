@@ -672,31 +672,38 @@
   {%- else -%}
     {#-- Type unknown: query SHOW TABLES to find the actual object type --#}
     {%- if execute -%}
-      {%- set show_result = run_query('SHOW TABLES IN ' ~ relation.schema ~ ' LIKE \'' ~ relation.identifier ~ '\'') -%}
-      {%- set actual_type = none -%}
+      {#-- Use database prefix for SHOW TABLES. Fall back to target.database if relation.database is None
+           (happens when manifest database=None due to parse-phase generate_database_name limitation) --#}
+      {%- set db = relation.database if (relation.database is not none and relation.database | string != 'None') else target.database -%}
+      {%- set schema_ref = (db ~ '.' ~ relation.schema) if db else relation.schema -%}
+      {%- set show_result = run_query('SHOW TABLES IN ' ~ schema_ref ~ ' LIKE \'' ~ relation.identifier ~ '\'') -%}
+      {#-- Use namespace to allow set inside for loop (Jinja2 scoping rule) --#}
+      {%- set ns = namespace(actual_type=none) -%}
       {%- for row in show_result.rows -%}
         {%- if row['table_name'] | lower == relation.identifier | lower -%}
           {%- if row['is_dynamic'] -%}
-            {%- set actual_type = 'dynamic table' -%}
+            {%- set ns.actual_type = 'dynamic table' -%}
           {%- elif row['is_materialized_view'] -%}
-            {%- set actual_type = 'materialized view' -%}
+            {%- set ns.actual_type = 'materialized view' -%}
           {%- elif row['is_view'] -%}
-            {%- set actual_type = 'view' -%}
+            {%- set ns.actual_type = 'view' -%}
           {%- else -%}
-            {%- set actual_type = 'table' -%}
+            {%- set ns.actual_type = 'table' -%}
           {%- endif -%}
         {%- endif -%}
       {%- endfor -%}
-      {%- if actual_type is not none -%}
+      {%- if ns.actual_type is not none -%}
         {% call statement('drop_relation', auto_begin=False) -%}
-          drop {{ actual_type }} if exists {{ relation }}
+          drop {{ ns.actual_type }} if exists {{ relation }}
         {%- endcall %}
       {%- endif -%}
       {#-- Also check streams (not returned by SHOW TABLES) --#}
-      {%- if actual_type is none -%}
-        {%- set stream_result = run_query('SHOW STREAMS IN ' ~ relation.schema) -%}
+      {%- if ns.actual_type is none -%}
+        {%- set stream_result = run_query('SHOW STREAMS IN ' ~ schema_ref) -%}
+        {%- set ns2 = namespace(found=false) -%}
         {%- for row in stream_result.rows -%}
           {%- if row['name'] | lower == relation.identifier | lower -%}
+            {%- set ns2.found = true -%}
             {% call statement('drop_relation_stream', auto_begin=False) -%}
               drop stream if exists {{ relation }}
             {%- endcall %}
