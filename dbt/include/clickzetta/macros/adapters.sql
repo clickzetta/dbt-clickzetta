@@ -95,7 +95,12 @@
       {%- for col in columns -%}
         {%- set default_name = relation.schema ~ '_' ~ relation.identifier ~ '_' ~ col ~ '_' ~ index_type ~ '_idx' -%}
         {%- set index_name = index.get('name', default_name) -%}
-        {%- set qualified_name = relation.schema ~ '.' ~ index_name -%}
+        {#-- Use three-part name when database is available --#}
+        {%- if relation.database is not none and relation.database | string != 'None' -%}
+          {%- set qualified_name = relation.database ~ '.' ~ relation.schema ~ '.' ~ index_name -%}
+        {%- else -%}
+          {%- set qualified_name = relation.schema ~ '.' ~ index_name -%}
+        {%- endif -%}
 
         {%- if index_type == 'bloomfilter' -%}
           {%- set analyzer = index.get('analyzer', none) -%}
@@ -620,6 +625,7 @@
 {% macro clickzetta__list_schemas(database) -%}
   {% call statement('list_schemas', fetch_result=True, auto_begin=False) %}
     show schemas
+    {%- if database is not none and database | string != 'None' %} in {{ database }}{% endif %}
   {% endcall %}
   {{ return(load_result('list_schemas').table) }}
 {% endmacro %}
@@ -647,8 +653,8 @@
 {% macro clickzetta__drop_relation(relation) -%}
   {#--
     relation.type uses underscores (dynamic_table, materialized_view) but SQL needs spaces.
-    When type is None (e.g. unit test fixture cleanup), drop both TABLE and VIEW to be safe —
-    ClickZetta's IF EXISTS makes the no-op case silent.
+    When type is None (e.g. unit test fixture cleanup), try all object types —
+    ClickZetta's IF EXISTS makes the no-op cases silent.
   --#}
   {%- if relation.type is none or relation.type | string == 'None' -%}
     {% call statement('drop_relation_table', auto_begin=False) -%}
@@ -656,6 +662,12 @@
     {%- endcall %}
     {% call statement('drop_relation_view', auto_begin=False) -%}
       drop view if exists {{ relation }}
+    {%- endcall %}
+    {% call statement('drop_relation_dynamic_table', auto_begin=False) -%}
+      drop dynamic table if exists {{ relation }}
+    {%- endcall %}
+    {% call statement('drop_relation_materialized_view', auto_begin=False) -%}
+      drop materialized view if exists {{ relation }}
     {%- endcall %}
   {%- else -%}
     {%- set drop_type = relation.type | string | replace('_', ' ') -%}

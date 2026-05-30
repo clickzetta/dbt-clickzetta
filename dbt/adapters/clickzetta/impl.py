@@ -101,12 +101,18 @@ class ClickZettaAdapter(SQLAdapter):
 
         with self.connection_named("catalog"):
             for schema, databases in schema_databases.items():
+                # Use the first database (workspace) for qualified names.
+                # In single-workspace setups this is always the same value.
+                db = next(iter(databases)) if databases else None
+                qualified_schema = f"{db}.{schema}" if db else schema
+
                 # Fetch stats (row_count, bytes, last_modify_time) from INFORMATION_SCHEMA
                 stats_map: Dict[str, Dict] = {}
                 try:
                     _, info_table = self.execute(
                         f"SELECT table_name, row_count, bytes, last_modify_time "
-                        f"FROM information_schema.tables WHERE table_schema = '{schema}'",
+                        f"FROM {qualified_schema}.information_schema.tables "
+                        f"WHERE table_schema = '{schema}'",
                         fetch=True,
                     )
                     for info_row in info_table.rows:
@@ -116,17 +122,17 @@ class ClickZettaAdapter(SQLAdapter):
                             "last_modify_time": str(info_row["last_modify_time"]) if info_row["last_modify_time"] else None,
                         }
                 except Exception as e:
-                    logger.debug(f"Could not fetch INFORMATION_SCHEMA for {schema}: {e}")
+                    logger.debug(f"Could not fetch INFORMATION_SCHEMA for {qualified_schema}: {e}")
 
                 try:
-                    _, tables_table = self.execute(f"SHOW TABLES IN {schema}", fetch=True)
+                    _, tables_table = self.execute(f"SHOW TABLES IN {qualified_schema}", fetch=True)
                     for tbl_row in tables_table.rows:
                         tbl_name = tbl_row["table_name"]
                         tbl_type = "view" if tbl_row["is_view"] else "table"
                         stats = stats_map.get(tbl_name, {})
                         try:
                             _, desc_table = self.execute(
-                                f"DESCRIBE TABLE {schema}.{tbl_name}", fetch=True
+                                f"DESCRIBE TABLE {qualified_schema}.{tbl_name}", fetch=True
                             )
                             for database in databases:
                                 for idx, col_row in enumerate(desc_table.rows):
@@ -153,9 +159,9 @@ class ClickZettaAdapter(SQLAdapter):
                                         "stats:last_modified:include": stats.get("last_modify_time") is not None,
                                     })
                         except Exception as e:
-                            logger.debug(f"Could not describe {schema}.{tbl_name}: {e}")
+                            logger.debug(f"Could not describe {qualified_schema}.{tbl_name}: {e}")
                 except Exception as e:
-                    logger.debug(f"Could not list tables in {schema}: {e}")
+                    logger.debug(f"Could not list tables in {qualified_schema}: {e}")
 
         if not catalog_rows:
             catalog_table = agate.Table([], [])
@@ -297,8 +303,13 @@ class ClickZettaAdapter(SQLAdapter):
 
         # SHOW TABLES does not include streams — query them separately
         try:
+            schema_ref = (
+                f"{schema_relation.database}.{schema_relation.schema}"
+                if schema_relation.database
+                else schema_relation.schema
+            )
             _, stream_results = self.execute(
-                f"show streams in {schema_relation.schema}", fetch=True
+                f"show streams in {schema_ref}", fetch=True
             )
             for row in stream_results.rows:
                 row_dict = {k.lower(): v for k, v in zip(stream_results.column_names, row)}
@@ -336,17 +347,18 @@ class ClickZettaAdapter(SQLAdapter):
 
     def load_csv_rows(self, model, agate_table) -> agate.Table:
         """Stub — actual loading is done by clickzetta__load_csv_rows macro
-        via adapter.put_seed_file() + COPY INTO SQL statements."""
+        via adapter.seed_load() which handles PUT + COPY INTO + cleanup."""
         return agate_table
 
     @available
-    def put_seed_file(self, agate_table) -> str:
-        """Write agate table to a temp CSV and PUT it to User Volume.
+    def seed_load(self, relation_str: str, agate_table) -> None:
+        """Load seed data via PUT + COPY INTO with full cleanup on failure.
 
-        Returns the filename in User Volume so the Jinja macro can
-        execute COPY INTO and REMOVE USER VOLUME FILE as SQL statements.
+        Combines file write, PUT, COPY INTO, and User Volume cleanup in one
+        Python method so try/finally can guarantee cleanup regardless of
+        which step fails.
 
-        PUT must be executed via cursor directly (bypassing query_header comment
+        PUT is executed via cursor directly (bypassing query_header comment
         injection) because the connector detects PUT by checking if the SQL
         starts with 'PUT ' after lstrip().
         """
@@ -357,6 +369,7 @@ class ClickZettaAdapter(SQLAdapter):
 
         tmp_name = f"dbt_seed_{uuid.uuid4().hex[:12]}.csv"
         tmp_path = os.path.join(tempfile.gettempdir(), tmp_name)
+        volume_file_uploaded = False
         try:
             with open(tmp_path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
@@ -367,23 +380,48 @@ class ClickZettaAdapter(SQLAdapter):
                         for v in row
                     ])
 
-            # Execute PUT directly via cursor to avoid query_header comment injection.
-            # The connector detects PUT by checking sql.lstrip().upper().startswith("PUT "),
-            # so any prefix (e.g. a dbt query comment) would break detection.
+            # PUT via cursor to avoid query_header comment injection
             conn = self.connections.get_thread_connection()
-            put_sql = f"PUT '{tmp_path}' TO USER VOLUME FILE '{tmp_name}'"
             cursor = conn.handle.cursor()
-            cursor.execute(put_sql)
+            try:
+                cursor.execute(f"PUT '{tmp_path}' TO USER VOLUME FILE '{tmp_name}'")
+            finally:
+                cursor.close()
+            volume_file_uploaded = True
+
+            # COPY INTO — PURGE=TRUE removes the file from User Volume on success
+            self.execute(
+                f"COPY INTO {relation_str} FROM USER VOLUME "
+                f"USING CSV OPTIONS('header'='true', 'nullValue'='') "
+                f"FILES('{tmp_name}') PURGE=TRUE",
+                auto_begin=False, fetch=False,
+            )
+            volume_file_uploaded = False  # PURGE handled cleanup
 
         finally:
+            # Always remove local temp file
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
+            # Remove User Volume file if COPY INTO failed before PURGE ran
+            if volume_file_uploaded:
+                try:
+                    conn = self.connections.get_thread_connection()
+                    cursor = conn.handle.cursor()
+                    try:
+                        cursor.execute(f"REMOVE USER VOLUME FILE '{tmp_name}'")
+                    finally:
+                        cursor.close()
+                except Exception:
+                    logger.debug(f"Could not remove User Volume file: {tmp_name}")
 
-        return tmp_name
+    @available
+    def put_seed_file(self, agate_table) -> str:
+        """Deprecated — use seed_load() instead. Kept for backwards compatibility."""
+        return ""
 
     @available
     def seed_copy_into(self, relation_str: str, agate_table, column_override: dict) -> None:
-        """Deprecated — kept for backwards compatibility. Use put_seed_file() instead."""
+        """Deprecated — use seed_load() instead. Kept for backwards compatibility."""
         pass
 
     def timestamp_add_sql(self, add_to: str, number: int = 1, interval: str = "hour") -> str:
