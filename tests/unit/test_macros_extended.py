@@ -98,7 +98,15 @@ class TestSafeCastMacro(MacroTestBase):
 
 
 class TestDropRelationMacro(MacroTestBase):
-    """Tests for clickzetta__drop_relation SQL generation."""
+    """Tests for clickzetta__drop_relation SQL generation.
+
+    drop_relation behavior:
+    - Known non-table types (view, dynamic_table, materialized_view, stream):
+      issue DROP directly without DB lookup.
+    - type=None or type='table': query SHOW TABLES LIKE to discover actual type,
+      then issue the correct DROP. This handles dbt unit test fixtures which have
+      type='table' but ClickZetta creates them as VIEWs (no temp table support).
+    """
 
     def _drop_sqls(self, rel_type):
         captured = []
@@ -111,10 +119,6 @@ class TestDropRelationMacro(MacroTestBase):
         except Exception:
             pass
         return captured
-
-    def test_drop_table(self):
-        sqls = self._drop_sqls("table")
-        self.assertTrue(any("drop table if exists" in s for s in sqls), f"Got: {sqls}")
 
     def test_drop_view(self):
         sqls = self._drop_sqls("view")
@@ -131,6 +135,15 @@ class TestDropRelationMacro(MacroTestBase):
     def test_drop_stream(self):
         sqls = self._drop_sqls("stream")
         self.assertTrue(any("drop stream if exists" in s for s in sqls), f"Got: {sqls}")
+
+    def test_drop_table_and_none_require_db_lookup(self):
+        """type='table' and type=None both use SHOW TABLES to find actual type.
+        Without execute=True context, no SQL is issued (DB lookup skipped).
+        The actual DROP is verified by functional tests (full-refresh pipeline)."""
+        for rel_type in ["table", None]:
+            sqls = self._drop_sqls(rel_type)
+            self.assertEqual(sqls, [],
+                f"type={rel_type!r}: expected no SQL without execute context, got: {sqls}")
 
     def test_drop_none_type_requires_db_lookup(self):
         """When type=None, drop_relation uses SHOW TABLES to discover the actual type.
