@@ -166,3 +166,131 @@ class TestAdapterMethods(BaseAdapterMethod):
         # The adapter method itself works correctly — this is a test ordering issue.
         # We skip this test file and rely on TestIncrementalMergeCorrectness for coverage.
         return {}
+
+
+# ── Snapshot: multi-field simultaneous change (check strategy) ────────────────
+
+_snapshot_multi_field_sql = """
+{% snapshot customers_multi_snapshot %}
+{{ config(
+    target_schema=schema,
+    unique_key='customer_id',
+    strategy='check',
+    check_cols=['name', 'city', 'status']
+) }}
+select customer_id, name, city, status
+from {{ source('raw', 'snap_customers') }}
+{% endsnapshot %}
+"""
+
+_snap_schema_yml = """
+version: 2
+sources:
+  - name: raw
+    schema: "{{ target.schema }}"
+    tables:
+      - name: snap_customers
+"""
+
+
+class TestSnapshotCheckMultiFieldChange:
+    """
+    Verify snapshot check strategy when multiple fields change simultaneously.
+    CLAUDE.md notes this was only tested for single-field changes.
+    """
+
+    @pytest.fixture(scope="class")
+    def snapshots(self):
+        return {"customers_multi_snapshot.sql": _snapshot_multi_field_sql}
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"schema.yml": _snap_schema_yml}
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"name": "snapshot_multi_field_test"}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def clean_up(self, project):
+        yield
+        with project.adapter.connection_named("__test"):
+            relation = project.adapter.Relation.create(
+                database=project.database, schema=project.test_schema
+            )
+            project.adapter.drop_schema(relation)
+
+    def test_snapshot_captures_multi_field_change(self, project):
+        """
+        When name, city, and status all change at once, snapshot should:
+        - Close the old record (set dbt_valid_to)
+        - Insert a new record with the new values
+        - Result: 2 rows for the customer (1 historical + 1 current)
+        """
+        schema = project.test_schema
+        db = project.database
+
+        project.run_sql(
+            f"create table if not exists {db}.{schema}.snap_customers "
+            f"(customer_id int, name string, city string, status string)"
+        )
+        project.run_sql(
+            f"insert into {db}.{schema}.snap_customers values "
+            f"(1, 'Alice', 'Shanghai', 'active'), "
+            f"(2, 'Bob', 'Beijing', 'active')"
+        )
+
+        run_dbt(["snapshot"])
+
+        snap_relation = relation_from_name(project.adapter, "customers_multi_snapshot")
+
+        n = project.run_sql(f"select count(*) from {snap_relation}", fetch="one")[0]
+        assert n == 2, f"expected 2 rows after initial snapshot, got {n}"
+
+        # Change ALL three check_cols simultaneously for customer_id=1
+        project.run_sql(
+            f"update {db}.{schema}.snap_customers "
+            f"set name='Alice_new', city='Hangzhou', status='inactive' "
+            f"where customer_id = 1"
+        )
+
+        run_dbt(["snapshot"])
+
+        # customer_id=1 should now have 2 rows: 1 historical (dbt_valid_to set) + 1 current
+        n1 = project.run_sql(
+            f"select count(*) from {snap_relation} where customer_id = 1",
+            fetch="one"
+        )[0]
+        assert n1 == 2, f"expected 2 rows for customer_id=1 after multi-field change, got {n1}"
+
+        # The current record should have all new values
+        current = project.run_sql(
+            f"select name, city, status from {snap_relation} "
+            f"where customer_id = 1 and dbt_valid_to is null",
+            fetch="one"
+        )
+        assert current is not None, "expected a current record (dbt_valid_to is null) for customer_id=1"
+        assert current[0] == 'Alice_new', f"expected name='Alice_new', got {current[0]}"
+        assert current[1] == 'Hangzhou', f"expected city='Hangzhou', got {current[1]}"
+        assert current[2] == 'inactive', f"expected status='inactive', got {current[2]}"
+
+        # The historical record should have old values and dbt_valid_to set
+        historical = project.run_sql(
+            f"select name, city, status from {snap_relation} "
+            f"where customer_id = 1 and dbt_valid_to is not null",
+            fetch="one"
+        )
+        assert historical is not None, "expected a historical record (dbt_valid_to set) for customer_id=1"
+        assert historical[0] == 'Alice', f"expected historical name='Alice', got {historical[0]}"
+
+        # customer_id=2 (unchanged) should still have only 1 row
+        n2 = project.run_sql(
+            f"select count(*) from {snap_relation} where customer_id = 2",
+            fetch="one"
+        )[0]
+        assert n2 == 1, f"expected 1 row for customer_id=2 (unchanged), got {n2}"
+
+        # Total: 3 rows (2 for customer 1 + 1 for customer 2)
+        n_total = project.run_sql(f"select count(*) from {snap_relation}", fetch="one")[0]
+        assert n_total == 3, f"expected 3 total rows, got {n_total}"
+

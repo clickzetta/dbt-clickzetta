@@ -390,6 +390,123 @@ class TestDynamicTablePipeline:
         assert int(alice_count) == 3, f"expected Alice order_count=3, got {alice_count}"
 
 
+class TestDynamicTableDownstream:
+    """
+    Verify cascade refresh in a two-layer DT pipeline.
+
+    Note: ClickZetta does NOT support refresh_interval='DOWNSTREAM' (Snowflake-specific syntax).
+    Both layers use a fixed refresh_interval. The cascade behavior is verified by
+    manually refreshing the downstream DT and confirming it reflects upstream changes.
+    """
+
+    # Intermediate layer: fixed interval (DOWNSTREAM not supported in ClickZetta)
+    _dt_intermediate_sql = """
+{{ config(
+    materialized='dynamic_table',
+    refresh_interval='1 minutes',
+    refresh_vc='default_ap'
+) }}
+select id, name, amount * 2 as doubled_amount
+from {{ source('raw', 'raw_source') }}
+"""
+
+    # Downstream layer: fixed interval, reads from intermediate
+    _dt_downstream_sql = """
+{{ config(
+    materialized='dynamic_table',
+    refresh_interval='1 minutes',
+    refresh_vc='default_ap'
+) }}
+select name, sum(doubled_amount) as total
+from {{ ref('dt_intermediate') }}
+group by name
+"""
+
+    _schema_yml = """
+version: 2
+sources:
+  - name: raw
+    schema: "{{ target.schema }}"
+    tables:
+      - name: raw_source
+"""
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "dt_intermediate.sql": self._dt_intermediate_sql,
+            "dt_downstream.sql": self._dt_downstream_sql,
+            "schema.yml": self._schema_yml,
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"name": "dt_downstream_test"}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def clean_up(self, project):
+        yield
+        with project.adapter.connection_named("__test"):
+            relation = project.adapter.Relation.create(
+                database=project.database, schema=project.test_schema
+            )
+            project.adapter.drop_schema(relation)
+
+    def test_downstream_refresh_propagates(self, project):
+        """
+        Two-layer DT pipeline: intermediate → downstream aggregation.
+
+        ClickZetta manual REFRESH behavior:
+        - REFRESH DYNAMIC TABLE only refreshes the specified table, NOT its upstream dependencies.
+        - To propagate upstream changes through a pipeline, each layer must be refreshed
+          in dependency order: intermediate first, then downstream.
+
+        This test verifies:
+        1. Initial data flows correctly through the pipeline
+        2. After upstream change, refreshing intermediate then downstream gives correct results
+        """
+        schema = project.test_schema
+        db = project.database
+
+        project.run_sql(
+            f"create table if not exists {db}.{schema}.raw_source "
+            f"(id int, name string, amount int)"
+        )
+        project.run_sql(
+            f"insert into {db}.{schema}.raw_source values "
+            f"(1, 'Alice', 10), (2, 'Alice', 20), (3, 'Bob', 30)"
+        )
+
+        run_dbt(["run"])
+
+        intermediate = relation_from_name(project.adapter, "dt_intermediate")
+        downstream = relation_from_name(project.adapter, "dt_downstream")
+
+        # Initial state: Alice doubled = (10+20)*2 = 60, Bob doubled = 30*2 = 60
+        alice_total = project.run_sql(
+            f"select total from {downstream} where name = 'Alice'", fetch="one"
+        )[0]
+        assert int(alice_total) == 60, f"expected Alice total=60 initially, got {alice_total}"
+
+        # Upstream change: add a new Alice row (amount=50)
+        project.run_sql(
+            f"insert into {db}.{schema}.raw_source values (4, 'Alice', 50)"
+        )
+
+        # Must refresh in dependency order: intermediate first, then downstream
+        # (REFRESH does NOT cascade automatically in ClickZetta)
+        project.run_sql(f"refresh dynamic table {intermediate}")
+        project.run_sql(f"refresh dynamic table {downstream}")
+
+        alice_total = project.run_sql(
+            f"select total from {downstream} where name = 'Alice'", fetch="one"
+        )[0]
+        # Alice: (10+20+50)*2 = 160
+        assert int(alice_total) == 160, (
+            f"expected Alice total=160 after ordered refresh (intermediate→downstream), got {alice_total}"
+        )
+
+
 class TestMaterializedView:
     @pytest.fixture(scope="class")
     def seeds(self):

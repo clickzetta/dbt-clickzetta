@@ -969,3 +969,117 @@ class TestCompositeKeyMergeCorrectness:
         assert new_row is not None, "expected new row (user_id=3, event_date=2024-01-01)"
         assert int(new_row[0]) == 2, f"expected event_count=2 for new row, got {new_row[0]}"
 
+
+# ── 12. Incremental merge lookback window ─────────────────────────────────────
+
+_lookback_model_sql = """
+{{ config(
+    materialized='incremental',
+    incremental_strategy='merge',
+    unique_key='order_id'
+) }}
+select order_id, amount, updated_at
+from {{ source('raw', 'lb_orders') }}
+{% if is_incremental() %}
+-- Lookback window: reprocess last 3 days to catch late-arriving updates
+where updated_at >= (select max(updated_at) from {{ this }}) - interval 3 days
+{% endif %}
+"""
+
+_lb_schema_yml = """
+version: 2
+sources:
+  - name: raw
+    schema: "{{ target.schema }}"
+    tables:
+      - name: lb_orders
+"""
+
+
+class TestIncrementalLookbackWindow:
+    """
+    Verify the lookback window pattern:
+    - `>= max(updated_at) - interval N days` syntax works in ClickZetta
+    - Late-arriving updates within the window are picked up
+    - Rows outside the window are not reprocessed
+    """
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"lb_orders.sql": _lookback_model_sql, "schema.yml": _lb_schema_yml}
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"name": "lookback_window_test"}
+
+    @pytest.fixture(autouse=True)
+    def clean_up(self, project):
+        yield
+        with project.adapter.connection_named("__test"):
+            relation = project.adapter.Relation.create(
+                database=project.database, schema=project.test_schema
+            )
+            project.adapter.drop_schema(relation)
+
+    def test_lookback_window_catches_late_updates(self, project):
+        """
+        Lookback window: rows updated within the last N days are reprocessed.
+        - order_id=1: updated_at = day 0 (outside 3-day window on second run)
+        - order_id=2: updated_at = day 5 (within window, gets updated)
+        - order_id=3: updated_at = day 6 (new row, within window)
+        """
+        schema = project.test_schema
+        db = project.database
+
+        project.run_sql(
+            f"create table if not exists {db}.{schema}.lb_orders "
+            f"(order_id int, amount int, updated_at timestamp)"
+        )
+        # Initial data: two rows with different timestamps
+        project.run_sql(
+            f"insert into {db}.{schema}.lb_orders values "
+            f"(1, 100, cast('2024-01-01 00:00:00' as timestamp)), "
+            f"(2, 200, cast('2024-01-05 00:00:00' as timestamp))"
+        )
+
+        run_dbt(["run"])
+        relation = relation_from_name(project.adapter, "lb_orders")
+
+        n = project.run_sql(f"select count(*) from {relation}", fetch="one")[0]
+        assert n == 2, f"expected 2 rows after first run, got {n}"
+
+        # Simulate late-arriving update: order_id=2 updated within lookback window
+        # and new order_id=3 also within window
+        project.run_sql(
+            f"update {db}.{schema}.lb_orders set amount = 999 where order_id = 2"
+        )
+        project.run_sql(
+            f"insert into {db}.{schema}.lb_orders values "
+            f"(3, 300, cast('2024-01-06 00:00:00' as timestamp))"
+        )
+
+        run_dbt(["run"])
+
+        # order_id=2 should be updated (within 3-day lookback from max=2024-01-06)
+        amount_2 = project.run_sql(
+            f"select amount from {relation} where order_id = 2", fetch="one"
+        )[0]
+        assert int(amount_2) == 999, f"expected order_id=2 amount=999 (late update), got {amount_2}"
+
+        # order_id=3 should be inserted
+        n3 = project.run_sql(
+            f"select count(*) from {relation} where order_id = 3", fetch="one"
+        )[0]
+        assert n3 == 1, f"expected order_id=3 to exist, got {n3} rows"
+
+        # order_id=1 (outside window) should be unchanged
+        amount_1 = project.run_sql(
+            f"select amount from {relation} where order_id = 1", fetch="one"
+        )[0]
+        assert int(amount_1) == 100, f"expected order_id=1 amount=100 unchanged, got {amount_1}"
+
+        # Total: 3 rows
+        n = project.run_sql(f"select count(*) from {relation}", fetch="one")[0]
+        assert n == 3, f"expected 3 rows total, got {n}"
+
+
