@@ -645,11 +645,24 @@
 {% endmacro %}
 
 {% macro clickzetta__drop_relation(relation) -%}
-  {#-- relation.type uses underscores (dynamic_table, materialized_view) but SQL needs spaces --#}
-  {%- set drop_type = relation.type | string | replace('_', ' ') -%}
-  {% call statement('drop_relation', auto_begin=False) -%}
-    drop {{ drop_type }} if exists {{ relation }}
-  {%- endcall %}
+  {#--
+    relation.type uses underscores (dynamic_table, materialized_view) but SQL needs spaces.
+    When type is None (e.g. unit test fixture cleanup), drop both TABLE and VIEW to be safe —
+    ClickZetta's IF EXISTS makes the no-op case silent.
+  --#}
+  {%- if relation.type is none or relation.type | string == 'None' -%}
+    {% call statement('drop_relation_table', auto_begin=False) -%}
+      drop table if exists {{ relation }}
+    {%- endcall %}
+    {% call statement('drop_relation_view', auto_begin=False) -%}
+      drop view if exists {{ relation }}
+    {%- endcall %}
+  {%- else -%}
+    {%- set drop_type = relation.type | string | replace('_', ' ') -%}
+    {% call statement('drop_relation', auto_begin=False) -%}
+      drop {{ drop_type }} if exists {{ relation }}
+    {%- endcall %}
+  {%- endif %}
 {% endmacro %}
 
 
