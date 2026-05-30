@@ -161,3 +161,32 @@ class TestClickZettaAdapter(unittest.TestCase):
         # render should include database (workspace) prefix
         self.assertIn("db.", rel_with_db.render())
         self.assertEqual(rel_with_db.render(), "db.dbt.dbt_table_1")
+
+    def test_relation_type_consistency(self):
+        from dbt.adapters.clickzetta.relation import ClickZettaRelationType
+        # All relation types used in list_relations_without_caching must be
+        # ClickZettaRelationType enum members, not plain strings or classproperty values
+        for t in [
+            ClickZettaRelationType.Table,
+            ClickZettaRelationType.View,
+            ClickZettaRelationType.DynamicTable,
+            ClickZettaRelationType.MaterializedView,
+            ClickZettaRelationType.Stream,
+        ]:
+            rel = ClickZettaRelation.create(schema="s", identifier="t", type=t)
+            self.assertEqual(rel.type, t)
+            # type comparison must work both ways (StrEnum)
+            self.assertEqual(rel.type, str(t))
+
+    def test_generate_database_name_macro_logic(self):
+        # generate_database_name is a Jinja macro; test its Python-equivalent logic:
+        # - returns custom_database_name when provided
+        # - falls back to target.database (workspace) when not provided
+        def generate_database_name(custom_database_name, target_database):
+            if custom_database_name is not None:
+                return custom_database_name.strip()
+            return target_database.strip()
+
+        self.assertEqual(generate_database_name(None, "quick_start"), "quick_start")
+        self.assertEqual(generate_database_name("my_workspace", "quick_start"), "my_workspace")
+        self.assertEqual(generate_database_name("  padded  ", "quick_start"), "padded")
