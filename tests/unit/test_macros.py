@@ -214,6 +214,16 @@ class TestClickZettaMacros(unittest.TestCase):
 
         self.assertEqual(sql, "create dynamic table my_dynamic_table refresh interval 3 minutes as select 1")
 
+    def test_macros_create_dynamic_table_as_refresh_with_vc(self):
+        template = self.__get_template("adapters.sql")
+        self.config["refresh_interval"] = '5 MINUTE'
+        self.config["refresh_vc"] = 'default'
+        sql = self.__run_macro_dynamic_table(
+            template, "clickzetta__create_dynamic_table_as", "my_dynamic_table", "select 1"
+        ).strip()
+
+        self.assertEqual(sql, "create dynamic table my_dynamic_table refresh interval 5 MINUTE vcluster default as select 1")
+
     def test_macros_create_dynamic_table_as_all(self):
         template = self.__get_template("adapters.sql")
 

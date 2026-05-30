@@ -499,7 +499,6 @@
     {% if target_lag is not none %}
       TARGET_LAG '{{ target_lag }}'
     {% endif %}
-    {{ refresh_vc() }}
     {{ partition_cols(label="partitioned by") }}
     {{ clustered_cols(label="clustered by") }}
     {{ refresh_interval() }}
@@ -513,7 +512,6 @@
     {% if target_lag is not none %}
       TARGET_LAG '{{ target_lag }}'
     {% endif %}
-    {{ refresh_vc() }}
     {{ partition_cols(label="partitioned by") }}
     {{ clustered_cols(label="clustered by") }}
     {{ refresh_interval() }}
@@ -794,16 +792,15 @@
 
 {%- macro refresh_interval() -%}
   {% set refresh_interval = config.get('refresh_interval') %}
+  {% set refresh_vc = config.get('refresh_vc') %}
   {% if refresh_interval is not none %}
     refresh interval {{refresh_interval}}
+    {%- if refresh_vc is not none %} vcluster {{refresh_vc}}{% endif %}
   {% endif %}
 {%- endmacro -%}
 
 {%- macro refresh_vc() -%}
-  {% set refresh_vc = config.get('refresh_vc') %}
-  {% if refresh_vc is not none %}
-    PROPERTIES('refresh_vc'='{{refresh_vc}}')
-  {% endif %}
+  {#-- vcluster is now inlined into refresh_interval() — this macro is a no-op --#}
 {%- endmacro -%}
 
 {%- macro dynamic_table_initialize() -%}
