@@ -333,6 +333,56 @@ class ClickZettaAdapter(SQLAdapter):
         else:
             return column
 
+    def load_csv_rows(self, model, agate_table) -> agate.Table:
+        """Load seed CSV data via PUT + COPY INTO instead of INSERT.
+
+        This is 10-100x faster than row-by-row INSERT and avoids all type
+        conversion issues (timestamps, special characters, etc.) because
+        COPY INTO handles string-to-type coercion natively.
+        """
+        import csv
+        import os
+        import tempfile
+        import uuid
+
+        relation = self.Relation.create(
+            database=model.get("database"),
+            schema=model.get("schema"),
+            identifier=model.get("alias"),
+        )
+
+        # Write agate table to a temp CSV file
+        tmp_name = f"dbt_seed_{uuid.uuid4().hex[:12]}.csv"
+        tmp_path = os.path.join(tempfile.gettempdir(), tmp_name)
+        try:
+            with open(tmp_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(agate_table.column_names)
+                for row in agate_table.rows:
+                    writer.writerow([
+                        "" if v is None else str(v)
+                        for v in row
+                    ])
+
+            # PUT local file to User Volume
+            put_sql = f"PUT '{tmp_path}' TO USER VOLUME FILE '{tmp_name}'"
+            self.execute(put_sql, auto_begin=False, fetch=False)
+
+            # COPY INTO table from User Volume; PURGE cleans up the temp file
+            copy_sql = (
+                f"COPY INTO {relation} FROM USER VOLUME "
+                f"USING CSV OPTIONS('header'='true', 'nullValue'='') "
+                f"FILES('{tmp_name}') PURGE=TRUE"
+            )
+            self.execute(copy_sql, auto_begin=False, fetch=False)
+
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+        # Return a minimal agate table so dbt can log the first statement
+        return agate_table
+
     def timestamp_add_sql(self, add_to: str, number: int = 1, interval: str = "hour") -> str:
         return f"DATEADD({interval}, {number}, {add_to})"
 
