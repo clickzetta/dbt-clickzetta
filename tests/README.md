@@ -1,5 +1,15 @@
 # dbt-clickzetta Test Suite
 
+## Overview
+
+There are three layers of testing. **All three must pass before releasing a new version.**
+
+| Layer | What | Requires connection |
+|---|---|---|
+| Unit tests | Python methods + Jinja macro SQL generation | No |
+| Functional tests | dbt-core adapter test suite | Yes |
+| Examples project | End-to-end integration: all adapter features | Yes |
+
 ## Structure
 
 ```
@@ -15,21 +25,21 @@ tests/
     ├── test_data_correctness.py # Data correctness: merge, append, insert_overwrite, NULL handling
     ├── test_dynamic_table.py    # Dynamic table materialization
     └── test_grants.py           # Grants / RBAC
-```
 
-The `examples/` directory is a separate runnable dbt project that serves as an integration
-test suite. It is not part of the pytest test suite.
+examples/                        # Integration test project (separate from pytest)
+```
 
 ## Running Tests
 
-### Unit tests (no connection needed)
+### 1. Unit tests (no connection needed)
 
 ```bash
 pip install pytest
 pytest tests/unit/
+# Expected: 92 passed
 ```
 
-### Functional tests (requires connection)
+### 2. Functional tests (requires connection)
 
 Functional tests use dbt-core's pytest adapter test framework. Set environment variables:
 
@@ -45,19 +55,27 @@ export CLICKZETTA_TEST_SCHEMA=dbt_test
 pytest tests/functional/
 ```
 
-### Examples project (integration test)
+### 3. Examples project — integration test (requires connection)
 
-The `examples/` project is a complete dbt project that exercises all adapter features
-end-to-end. Run it manually:
+The `examples/` project exercises every adapter feature end-to-end with real data.
+This is the primary integration test and **must pass before any release**.
 
 ```bash
 cd examples
-cp profiles.yml.example profiles.yml   # fill in credentials
-dbt seed --profiles-dir . --full-refresh
-dbt run --profiles-dir .
-dbt snapshot --profiles-dir .          # required for assert_snapshot_integrity
-dbt test --profiles-dir .              # should pass 49/49
+cp profiles.yml.example profiles.yml   # fill in credentials once
+
+# Full test run (run in this order):
+dbt seed --profiles-dir . --full-refresh   # load test data
+dbt run --profiles-dir .                   # build all models (14 models)
+dbt snapshot --profiles-dir .              # build snapshots
+dbt test --profiles-dir .                  # run all tests
+# Expected: 49 passed, 0 errors
 ```
+
+**What it covers:** table/view/incremental/snapshot/dynamic_table/materialized_view
+materializations, all incremental strategies (merge/append/insert_overwrite/delete+insert),
+indexes (bloomfilter/inverted/vector), VCluster switching, persist_docs, grants, clone,
+Table Stream as source, seed via COPY INTO.
 
 ## Unit Test Coverage
 
