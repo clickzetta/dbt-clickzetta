@@ -81,7 +81,11 @@
 
 
 {% macro get_delete_insert_sql(source_relation, target_relation, unique_key, incremental_predicates=none) %}
-  {#-- DELETE matching rows, then INSERT all rows from source --#}
+  {#--
+    NOTE: ClickZetta does not support multi-statement execution.
+    This macro is kept for reference but is NOT called directly.
+    incremental.sql calls get_delete_insert_delete_sql and get_delete_insert_insert_sql separately.
+  --#}
   {%- set dest_columns = adapter.get_columns_in_relation(target_relation) -%}
   {%- set dest_cols_csv = dest_columns | map(attribute='quoted') | join(', ') -%}
 
@@ -105,6 +109,36 @@
   select {{ dest_cols_csv }} from {{ source_relation }}
   {%- if incremental_predicates %} where {{ incremental_predicates | join(' and ') }}{%- endif %}
 
+{% endmacro %}
+
+
+{% macro get_delete_insert_delete_sql(source_relation, target_relation, unique_key, incremental_predicates=none) %}
+  {#-- Step 1 of delete+insert: DELETE matching rows from target --#}
+  {% if unique_key is sequence and unique_key is not mapping and unique_key is not string %}
+    delete from {{ target_relation }}
+    where ({{ unique_key | join(', ') }}) in (
+      select {{ unique_key | join(', ') }} from {{ source_relation }}
+      {%- if incremental_predicates %} where {{ incremental_predicates | join(' and ') }}{%- endif %}
+    )
+  {% elif unique_key %}
+    delete from {{ target_relation }}
+    where {{ unique_key }} in (
+      select {{ unique_key }} from {{ source_relation }}
+      {%- if incremental_predicates %} where {{ incremental_predicates | join(' and ') }}{%- endif %}
+    )
+  {% else %}
+    {{ exceptions.raise_compiler_error("delete+insert strategy requires unique_key") }}
+  {% endif %}
+{% endmacro %}
+
+
+{% macro get_delete_insert_insert_sql(source_relation, target_relation, incremental_predicates=none) %}
+  {#-- Step 2 of delete+insert: INSERT all rows from source into target --#}
+  {%- set dest_columns = adapter.get_columns_in_relation(target_relation) -%}
+  {%- set dest_cols_csv = dest_columns | map(attribute='quoted') | join(', ') -%}
+  insert into table {{ target_relation }} ({{ dest_cols_csv }})
+  select {{ dest_cols_csv }} from {{ source_relation }}
+  {%- if incremental_predicates %} where {{ incremental_predicates | join(' and ') }}{%- endif %}
 {% endmacro %}
 
 

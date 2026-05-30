@@ -798,16 +798,6 @@ class TestIncrementalDeleteInsertCorrectness:
             )
             project.adapter.drop_schema(relation)
 
-    @pytest.mark.xfail(
-        reason=(
-            "ClickZetta does not support multi-statement execution. "
-            "delete+insert strategy generates 'DELETE ...; INSERT ...' as a single "
-            "statement call, but only the DELETE is executed — the INSERT is silently "
-            "dropped. This is a known adapter limitation. "
-            "Workaround: use merge or insert_overwrite strategy instead."
-        ),
-        strict=True,
-    )
     def test_delete_insert_replaces_matching_keys(self, project):
         """
         delete+insert semantics:
@@ -853,10 +843,6 @@ class TestIncrementalDeleteInsertCorrectness:
         )
 
         run_dbt(["run"])
-
-        # Debug: check source table state before second run
-        n_source = project.run_sql(f"select count(*) from {db}.{schema}.di_source", fetch="one")[0]
-        assert n_source == 4, f"expected 4 rows in source before second run, got {n_source}"
 
         n = project.run_sql(f"select count(*) from {relation}", fetch="one")[0]
         assert n == 4, f"expected 4 rows after delete+insert, got {n}"

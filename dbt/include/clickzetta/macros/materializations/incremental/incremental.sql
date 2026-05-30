@@ -60,9 +60,23 @@
       {{ create_table_as(True, tmp_relation, compiled_code, language) }}
     {%- endcall -%}
     {%- do process_schema_changes(on_schema_change, tmp_relation, existing_relation) -%}
-    {%- call statement('main') -%}
-      {{ dbt_clickzetta_get_incremental_sql(strategy, tmp_relation, target_relation, existing_relation, unique_key, incremental_predicates) }}
-    {%- endcall -%}
+    {%- if strategy == 'delete+insert' -%}
+      {#--
+        ClickZetta does not support multi-statement execution in a single call.
+        delete+insert requires two separate statements: DELETE then INSERT.
+        We use 'main' for DELETE (required by dbt) and 'main_insert' for INSERT.
+      --#}
+      {%- call statement('main') -%}
+        {{ get_delete_insert_delete_sql(tmp_relation, target_relation, unique_key, incremental_predicates) }}
+      {%- endcall -%}
+      {%- call statement('main_insert') -%}
+        {{ get_delete_insert_insert_sql(tmp_relation, target_relation, incremental_predicates) }}
+      {%- endcall -%}
+    {%- else -%}
+      {%- call statement('main') -%}
+        {{ dbt_clickzetta_get_incremental_sql(strategy, tmp_relation, target_relation, existing_relation, unique_key, incremental_predicates) }}
+      {%- endcall -%}
+    {%- endif -%}
     {#-- SQL tmp_relation is a view (ClickZetta has no temp tables/views); Python is a table --#}
     {%- if language == 'python' -%}
       {% call statement('drop_tmp_relation') -%}

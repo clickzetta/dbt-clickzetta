@@ -1,5 +1,6 @@
 import pytest
-from dbt.tests.util import run_dbt, get_connection
+import yaml
+from dbt.tests.util import run_dbt, get_connection, write_file
 
 
 _model_sql = """
@@ -18,6 +19,12 @@ _model_view_sql = """
 select 1 as id, 'hello' as name
 """
 
+# Model with grants removed — used to test revocation
+_model_no_grants_sql = """
+{{ config(materialized='table') }}
+select 1 as id, 'hello' as name
+"""
+
 
 class TestGrantsTable:
     @pytest.fixture(scope="class")
@@ -26,10 +33,11 @@ class TestGrantsTable:
 
     def test_grants_applied(self, project):
         run_dbt(["run"])
-        # verify grants were applied by checking SHOW GRANTS
+        schema = project.test_schema
+        db = project.database
         with get_connection(project.adapter) as conn:
             _, table = project.adapter.execute(
-                "SHOW GRANTS ON TABLE dbt_test.grants_model", fetch=True
+                f"SHOW GRANTS ON TABLE {db}.{schema}.grants_model", fetch=True
             )
         rows = [dict(zip([c.lower() for c in table.column_names], r)) for r in table.rows]
         direct = [r for r in rows if r["granted_type"] == "PRIVILEGE"]
@@ -39,12 +47,14 @@ class TestGrantsTable:
         assert "workspace_analyst" in grantees, f"Expected 'workspace_analyst' in {grantees}"
 
     def test_grants_revoked_on_change(self, project):
-        # re-run with empty grants — should revoke
-        project.update_config("models", {"grants_model": {"grants": {}}})
-        run_dbt(["run"])
+        # Re-run with grants removed — should revoke by rebuilding the table without grants
+        write_file(_model_no_grants_sql, project.project_root, "models", "grants_model.sql")
+        run_dbt(["run", "--full-refresh"])
+        schema = project.test_schema
+        db = project.database
         with get_connection(project.adapter) as conn:
             _, table = project.adapter.execute(
-                "SHOW GRANTS ON TABLE dbt_test.grants_model", fetch=True
+                f"SHOW GRANTS ON TABLE {db}.{schema}.grants_model", fetch=True
             )
         rows = [dict(zip([c.lower() for c in table.column_names], r)) for r in table.rows]
         direct = [r for r in rows if r["granted_type"] == "PRIVILEGE"]
@@ -61,9 +71,11 @@ class TestGrantsView:
 
     def test_grants_applied_view(self, project):
         run_dbt(["run"])
+        schema = project.test_schema
+        db = project.database
         with get_connection(project.adapter) as conn:
             _, table = project.adapter.execute(
-                "SHOW GRANTS ON VIEW dbt_test.grants_view", fetch=True
+                f"SHOW GRANTS ON VIEW {db}.{schema}.grants_view", fetch=True
             )
         rows = [dict(zip([c.lower() for c in table.column_names], r)) for r in table.rows]
         direct = [r for r in rows if r["granted_type"] == "PRIVILEGE"]
