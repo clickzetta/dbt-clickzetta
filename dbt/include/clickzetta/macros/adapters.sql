@@ -655,11 +655,12 @@
     So we cannot blindly issue DROP TABLE + DROP VIEW — if the object exists as the wrong
     type, ClickZetta raises an error.
 
-    When type is known: issue the correct DROP directly.
-    When type is None (e.g. unit test fixture cleanup): query SHOW TABLES to discover
-    the actual type, then issue the correct DROP.
+    When type is known AND is not 'table': issue the correct DROP directly.
+    When type is None or 'table': query SHOW TABLES to discover the actual type.
+    Reason: dbt unit test fixtures have type='table' but ClickZetta creates them as VIEWs
+    (no temp table support), so we must verify the actual type before dropping.
   --#}
-  {%- if relation.type is not none and relation.type | string != 'None' -%}
+  {%- if relation.type is not none and relation.type | string != 'None' and relation.type | string != 'table' -%}
     {%- set drop_type = relation.type | string | replace('_', ' ') -%}
     {% call statement('drop_relation', auto_begin=False) -%}
       drop {{ drop_type }} if exists {{ relation }}
