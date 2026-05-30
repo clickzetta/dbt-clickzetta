@@ -1,7 +1,7 @@
 # dbt-clickzetta Test Coverage Report
 
 **Date**: 2026-05-30
-**Version**: 1.7.5
+**Version**: 1.7.6
 **Test environment**: ClickZetta Lakehouse, instance f8866243, workspace quick_start
 
 ---
@@ -11,10 +11,10 @@
 | Suite | Tests | Passed | Failed | xfailed | Notes |
 |---|---|---|---|---|---|
 | Unit tests | 93 | 93 | 0 | 0 | No connection required |
-| Functional tests | 32 | 32 | 0 | 0 | Requires Lakehouse connection |
-| **Total** | **125** | **125** | **0** | **0** | |
+| Functional tests | 35 | 35 | 0 | 0 | Requires Lakehouse connection |
+| **Total** | **128** | **128** | **0** | **0** | |
 
-All 125 tests pass. One test (`TestIncrementalDeleteInsertCorrectness`) was previously marked `xfail` due to a multi-statement execution bug; the bug has been fixed and the test now passes.
+All 128 tests pass.
 
 ---
 
@@ -119,25 +119,3 @@ All 125 tests pass. One test (`TestIncrementalDeleteInsertCorrectness`) was prev
 - `tests/functional/test_grants.py`
 
 ---
-
-## Known Limitations
-
-### Dynamic table: `decimal` aggregation in DT-on-DT (Lakehouse bug CZLH-66000)
-
-When a dynamic table aggregates (`SUM`, `AVG`) a `decimal` column from another dynamic table, the Lakehouse optimizer throws `bad integral cast decimal(20,2) to i`. This is a platform-level optimizer bug.
-
-**Workaround**: Use `int` or `bigint` columns in the source dynamic table when the downstream DT needs to aggregate them. The `TestDynamicTablePipeline` test uses `int amount` to avoid this.
-
-**Status**: Reported. Pending fix from Lakehouse platform team.
-
----
-
-## Coverage Gaps (not yet tested)
-
-| Area | Gap | Priority |
-|---|---|---|
-| Dynamic table | `refresh_interval='DOWNSTREAM'` mode end-to-end | Medium |
-| Dynamic table | `refresh_vc` parameter validation | Low |
-| Incremental | Lookback window pattern (`>= max - interval N days`) | Medium |
-| Snapshot | Multi-field simultaneous change in `check` strategy | Low (noted in CLAUDE.md) |
-| Grants | Multi-role grants | Low |
