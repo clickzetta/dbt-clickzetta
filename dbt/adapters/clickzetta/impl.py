@@ -339,6 +339,8 @@ class ClickZettaAdapter(SQLAdapter):
         This is 10-100x faster than row-by-row INSERT and avoids all type
         conversion issues (timestamps, special characters, etc.) because
         COPY INTO handles string-to-type coercion natively.
+
+        dbt seed files are always CSV, so no other format support is needed.
         """
         import csv
         import os
@@ -354,6 +356,7 @@ class ClickZettaAdapter(SQLAdapter):
         # Write agate table to a temp CSV file
         tmp_name = f"dbt_seed_{uuid.uuid4().hex[:12]}.csv"
         tmp_path = os.path.join(tempfile.gettempdir(), tmp_name)
+        volume_file_uploaded = False
         try:
             with open(tmp_path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
@@ -367,20 +370,32 @@ class ClickZettaAdapter(SQLAdapter):
             # PUT local file to User Volume
             put_sql = f"PUT '{tmp_path}' TO USER VOLUME FILE '{tmp_name}'"
             self.execute(put_sql, auto_begin=False, fetch=False)
+            volume_file_uploaded = True
 
-            # COPY INTO table from User Volume; PURGE cleans up the temp file
+            # COPY INTO table from User Volume
+            # PURGE=TRUE removes the file from User Volume on success
             copy_sql = (
                 f"COPY INTO {relation} FROM USER VOLUME "
                 f"USING CSV OPTIONS('header'='true', 'nullValue'='') "
                 f"FILES('{tmp_name}') PURGE=TRUE"
             )
             self.execute(copy_sql, auto_begin=False, fetch=False)
+            volume_file_uploaded = False  # PURGE handled cleanup
 
         finally:
+            # Always remove local temp file
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
+            # Remove User Volume file if COPY INTO failed before PURGE ran
+            if volume_file_uploaded:
+                try:
+                    self.execute(
+                        f"REMOVE USER VOLUME FILE '{tmp_name}'",
+                        auto_begin=False, fetch=False,
+                    )
+                except Exception:
+                    logger.debug(f"Could not remove User Volume file: {tmp_name}")
 
-        # Return a minimal agate table so dbt can log the first statement
         return agate_table
 
     def timestamp_add_sql(self, add_to: str, number: int = 1, interval: str = "hour") -> str:
