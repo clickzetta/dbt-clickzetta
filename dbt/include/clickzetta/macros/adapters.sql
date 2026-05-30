@@ -656,9 +656,13 @@
     type, ClickZetta raises an error.
 
     When type is known AND is not 'table': issue the correct DROP directly.
-    When type is None or 'table': query SHOW TABLES to discover the actual type.
-    Reason: dbt unit test fixtures have type='table' but ClickZetta creates them as VIEWs
-    (no temp table support), so we must verify the actual type before dropping.
+    When type is None or 'table': query SHOW TABLES to discover the actual type first.
+
+    Why type='table' also needs a lookup:
+    ClickZetta has no temp table support. When dbt calls create_table_as(temporary=True),
+    the adapter creates a regular VIEW instead. dbt still passes type='table' to
+    drop_relation, but the actual object is a VIEW — so DROP TABLE would fail.
+    Querying SHOW TABLES reveals the actual type and issues the correct DROP.
   --#}
   {%- if relation.type is not none and relation.type | string != 'None' and relation.type | string != 'table' -%}
     {%- set drop_type = relation.type | string | replace('_', ' ') -%}
