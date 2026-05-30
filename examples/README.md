@@ -170,6 +170,26 @@ WHERE order_id = '1001'
 ORDER BY dbt_valid_from;
 ```
 
+### Snapshot History Verification（可选）
+
+`assert_snapshot_integrity` 测试验证 SCD Type 2 结构性约束，任何时候都能通过。
+
+如果需要验证城市变更历史（C001: Shanghai→Hangzhou，C003: Guangzhou→Chengdu），需要手动执行两轮 seed+snapshot：
+
+```bash
+# 第一轮：加载原始城市数据（Shanghai/Guangzhou），建立 snapshot baseline
+dbt seed --profiles-dir . --select v1/raw_customers --full-refresh
+dbt snapshot --profiles-dir .
+
+# 第二轮：加载变更后城市数据（Hangzhou/Chengdu），产生历史记录
+dbt seed --profiles-dir . --select raw_customers --full-refresh
+dbt snapshot --profiles-dir .
+
+# 验证：customers_snapshot 应有 7 行（5 current + 2 historical）
+```
+
+`seeds/v1/raw_customers.csv` 是原始城市数据（默认 disabled），`seeds/raw_customers.csv` 是变更后数据（当前状态）。
+
 ---
 
 ## 功能详解

@@ -25,3 +25,7 @@ models:
 seeds:
   clickzetta_example:
     +schema: raw
+    v1:
+      # Baseline data for snapshot history setup — disabled by default.
+      # See README "Snapshot History Verification" for usage.
+      +enabled: false
