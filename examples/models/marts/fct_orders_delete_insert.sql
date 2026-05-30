@@ -2,7 +2,7 @@
     materialized='incremental',
     incremental_strategy='delete+insert',
     unique_key='order_id',
-    vcluster='DEFAULT_AP'
+    vcluster='default'
 ) }}
 
 select
