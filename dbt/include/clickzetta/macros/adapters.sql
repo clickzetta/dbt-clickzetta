@@ -628,12 +628,18 @@
   {% call statement('rename_relation') -%}
     {% if not from_relation.type %}
       {% do exceptions.raise_database_error("Cannot rename a relation with a blank type: " ~ from_relation.identifier) %}
-    {% elif from_relation.type in ('table') %}
+    {% elif from_relation.type == 'table' %}
         alter table {{ from_relation }} rename to {{ to_relation }}
     {% elif from_relation.type == 'view' %}
         alter view {{ from_relation }} rename to {{ to_relation }}
+    {% elif from_relation.type == 'dynamic_table' %}
+        alter dynamic table {{ from_relation }} rename to {{ to_relation }}
+    {% elif from_relation.type == 'materialized_view' %}
+        alter materialized view {{ from_relation }} rename to {{ to_relation }}
+    {% elif from_relation.type == 'stream' %}
+      {% do exceptions.raise_compiler_error("Table Streams cannot be renamed. Drop and recreate the stream: " ~ from_relation.identifier) %}
     {% else %}
-      {% do exceptions.raise_database_error("Unknown type '" ~ from_relation.type ~ "' for relation: " ~ from_relation.identifier) %}
+      {% do exceptions.raise_database_error("Cannot rename relation of type '" ~ from_relation.type ~ "': " ~ from_relation.identifier) %}
     {% endif %}
   {%- endcall %}
 {% endmacro %}
@@ -648,7 +654,12 @@
 
 
 {% macro clickzetta__generate_database_name(custom_database_name=none, node=none) -%}
-  {% do return(None) %}
+  {# ClickZetta workspace maps to dbt database. Use custom name if provided, else target workspace. #}
+  {%- if custom_database_name is not none -%}
+    {{ custom_database_name | trim }}
+  {%- else -%}
+    {{ target.database | trim }}
+  {%- endif -%}
 {%- endmacro %}
 
 {% macro clickzetta__persist_docs(relation, model, for_relation, for_columns) -%}

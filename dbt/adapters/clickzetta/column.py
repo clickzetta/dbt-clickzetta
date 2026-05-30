@@ -62,18 +62,16 @@ class ClickZettaColumn(dbtClassMixin, Column):  # type: ignore
 
     def is_integer(self) -> bool:
         return self.dtype.lower() in [
-            "int8",
-            "int16",
-            "int32",
-            "int64",
+            "tinyint", "smallint", "int", "bigint",
+            # legacy internal names kept for backwards compatibility
+            "int8", "int16", "int32", "int64",
         ]
 
     def is_float(self):
         return self.dtype.lower() in [
-            "float32",
-            "float64",
-            # TODO(hanmiao.li): decimal is a subclass of float, but we don't want to treat it
-            # "decimal",
+            "float", "double",
+            # legacy internal names kept for backwards compatibility
+            "float32", "float64",
         ]
 
     @property

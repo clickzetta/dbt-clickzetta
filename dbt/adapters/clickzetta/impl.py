@@ -19,7 +19,7 @@ from dbt.adapters.clickzetta import ClickZettaColumn
 from dbt.adapters.clickzetta.relation import ClickZettaRelationType
 from dbt.contracts.graph.manifest import Manifest
 from dbt.contracts.graph.nodes import ConstraintType
-from dbt.adapters.base import BaseRelation, SchemaSearchMap, RelationType
+from dbt.adapters.base import BaseRelation, SchemaSearchMap
 from dbt.exceptions import CompilationError, DbtRuntimeError
 from dbt_common.clients.agate_helper import DEFAULT_TYPE_TESTER
 from dbt.adapters.contracts.connection import AdapterResponse
@@ -275,15 +275,15 @@ class ClickZettaAdapter(SQLAdapter):
             _schema, _identifier, _is_view, _is_materialized_view, _, _is_dynamic = row
             try:
                 if _is_view:
-                    _type = RelationType.View
+                    _type = ClickZettaRelationType.View
                 elif _is_materialized_view:
-                    _type = self.Relation.get_relation_type.MaterializedView
+                    _type = ClickZettaRelationType.MaterializedView
                 elif _is_dynamic:
-                    _type = self.Relation.DynamicTable
+                    _type = ClickZettaRelationType.DynamicTable
                 else:
-                    _type = RelationType.Table
+                    _type = ClickZettaRelationType.Table
             except ValueError:
-                _type = self.Relation.External
+                _type = ClickZettaRelationType.External
             relations.append(
                 self.Relation.create(
                     database=schema_relation.database,
@@ -307,7 +307,7 @@ class ClickZettaAdapter(SQLAdapter):
                         schema=row_dict.get("schema_name", schema_relation.schema),
                         identifier=row_dict["name"],
                         quote_policy=quote_policy,
-                        type=self.Relation.get_relation_type.Stream,
+                        type=ClickZettaRelationType.Stream,
                     )
                 )
         except Exception:

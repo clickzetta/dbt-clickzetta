@@ -12,6 +12,7 @@ import agate
 import dbt_common.clients.agate_helper
 from clickzetta.dbapi.connection import Connection as ClickZettaConnection
 from clickzetta.client import Client
+from clickzetta.connector.v0.exceptions import OperationalError, InterfaceError
 
 from dbt.exceptions import (
     DbtInternalError,
@@ -132,7 +133,7 @@ class ClickZettaConnectionManager(SQLConnectionManager):
             logger=logger,
             retry_limit=creds.connect_retries,
             retry_timeout=exponential_backoff,
-            retryable_exceptions=[],
+            retryable_exceptions=[OperationalError, InterfaceError],
         )
 
     def cancel(self, connection):
