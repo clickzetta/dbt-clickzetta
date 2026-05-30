@@ -13,6 +13,25 @@ PyPI 包名：`dbt-clickzetta`，发布账号：`clickzetta`（非开发者个�
 
 ## 发版流程
 
+**发版前必须完整跑通所有三层测试（缺一不可）：**
+
+```bash
+# 1. Unit tests（无需连接）
+.venv18/bin/python3 -m pytest tests/unit/
+# 期望：92 passed
+
+# 2. Examples 集成测试（需连接，必须按顺序跑全四步）
+cd examples
+.venv18/bin/python3 -c "import sys; sys.argv=['dbt','seed','--profiles-dir','.','--full-refresh']; from dbt.cli.main import cli; cli(standalone_mode=False)"
+.venv18/bin/python3 -c "import sys; sys.argv=['dbt','run','--profiles-dir','.']; from dbt.cli.main import cli; cli(standalone_mode=False)"
+.venv18/bin/python3 -c "import sys; sys.argv=['dbt','snapshot','--profiles-dir','.']; from dbt.cli.main import cli; cli(standalone_mode=False)"
+.venv18/bin/python3 -c "import sys; sys.argv=['dbt','test','--profiles-dir','.']; from dbt.cli.main import cli; cli(standalone_mode=False)"
+# 期望：seed 3/3，run 14/14，snapshot 2/2，test 49/49
+cd ..
+```
+
+测试全部通过后：
+
 1. 修改 `dbt/adapters/clickzetta/__version__.py` 中的版本号（唯一版本号来源，setup.py 自动读取）
 2. 提交并推送到 main：`git add ... && git commit && git push origin main`
 3. 触发 GitHub Actions 发布：
