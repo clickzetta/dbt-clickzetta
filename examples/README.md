@@ -405,24 +405,30 @@ dbt run-operation drop_object --args '{relation: example.my_table, type: table}'
 
 ---
 
-## 清理测试对象
+## Cleanup — Required After Testing
 
-示例运行完毕后，执行以下命令清理所有创建的对象：
+**Always clean up Lakehouse objects after running the examples.** Leaving test objects
+behind wastes storage and can interfere with future test runs.
 
 ```bash
-# 方式一：使用 cz-cli（推荐）
-cz-cli sql "$(cat analyses/cleanup.sql)" --profile your_profile --write
+# Run each statement in cleanup.sql individually (recommended — handles errors per statement)
+source ../test.env   # or set CLICKZETTA_INSTANCE / CLICKZETTA_WORKSPACE manually
+while IFS= read -r line; do
+  line=$(echo "$line" | sed 's/--.*$//' | xargs)
+  [ -z "$line" ] && continue
+  cz-cli sql "$line" --instance <your_instance> --workspace <your_workspace> --write 2>/dev/null
+done < analyses/cleanup.sql
 
-# 方式二：在 ClickZetta 控制台 SQL 编辑器中打开 analyses/cleanup.sql 执行
+# Alternative: run the whole file at once via ClickZetta console SQL editor
 ```
 
-`cleanup.sql` 会删除以下内容：
+`cleanup.sql` removes:
 
-| Schema | 对象 |
+| Schema | Objects |
 |---|---|
-| `example` | stg_orders、stg_customers、dim_customers、fct_orders_* 等所有模型 |
-| `example_snapshots` | orders_snapshot、customers_snapshot |
-| `example_raw` | raw_orders、raw_customers、raw_events（seed 数据）|
+| `example` | stg_orders, stg_customers, dim_customers, fct_orders_*, orders_clone, orders_vector_index, stream_changes, etc. |
+| `example_snapshots` | orders_snapshot, customers_snapshot |
+| `example_raw` | raw_orders, raw_customers, raw_events (seed data) |
 
 ---
 

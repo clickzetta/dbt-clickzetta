@@ -30,7 +30,20 @@ cd examples
 cd ..
 ```
 
-测试全部通过后：
+**测试完成后必须清理 Lakehouse 上的测试对象：**
+
+```bash
+cd examples
+source ../test.env
+while IFS= read -r line; do
+  line=$(echo "$line" | sed 's/--.*$//' | xargs)
+  [ -z "$line" ] && continue
+  cz-cli sql "$line" --instance f8866243 --workspace quick_start --write 2>/dev/null
+done < analyses/cleanup.sql
+cd ..
+```
+
+测试全部通过且清理完毕后：
 
 1. 修改 `dbt/adapters/clickzetta/__version__.py` 中的版本号（唯一版本号来源，setup.py 自动读取）
 2. 提交并推送到 main：`git add ... && git commit && git push origin main`

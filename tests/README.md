@@ -70,6 +70,13 @@ dbt run --profiles-dir .                   # build all models (14 models)
 dbt snapshot --profiles-dir .              # build snapshots
 dbt test --profiles-dir .                  # run all tests
 # Expected: 49 passed, 0 errors
+
+# Clean up Lakehouse objects after testing (required)
+while IFS= read -r line; do
+  line=$(echo "$line" | sed 's/--.*$//' | xargs)
+  [ -z "$line" ] && continue
+  cz-cli sql "$line" --instance <your_instance> --workspace <your_workspace> --write 2>/dev/null
+done < analyses/cleanup.sql
 ```
 
 **What it covers:** table/view/incremental/snapshot/dynamic_table/materialized_view
