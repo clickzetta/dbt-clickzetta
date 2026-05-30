@@ -651,39 +651,54 @@
 
 {% macro clickzetta__drop_relation(relation) -%}
   {#--
-    relation.type uses underscores (dynamic_table, materialized_view) but SQL needs spaces.
-    When type is None (e.g. unit test fixture cleanup), try all object types —
-    ClickZetta's IF EXISTS makes the no-op cases silent.
+    ClickZetta's IF EXISTS only suppresses "object not found" errors, NOT type mismatches.
+    So we cannot blindly issue DROP TABLE + DROP VIEW — if the object exists as the wrong
+    type, ClickZetta raises an error.
 
-    When type is 'table', also try DROP VIEW — dbt unit test fixtures are created as
-    VIEWs in ClickZetta (no temp table support) but dbt passes type='table'.
+    When type is known: issue the correct DROP directly.
+    When type is None (e.g. unit test fixture cleanup): query SHOW TABLES to discover
+    the actual type, then issue the correct DROP.
   --#}
-  {%- if relation.type is none or relation.type | string == 'None' -%}
-    {% call statement('drop_relation_table', auto_begin=False) -%}
-      drop table if exists {{ relation }}
-    {%- endcall %}
-    {% call statement('drop_relation_view', auto_begin=False) -%}
-      drop view if exists {{ relation }}
-    {%- endcall %}
-    {% call statement('drop_relation_dynamic_table', auto_begin=False) -%}
-      drop dynamic table if exists {{ relation }}
-    {%- endcall %}
-    {% call statement('drop_relation_materialized_view', auto_begin=False) -%}
-      drop materialized view if exists {{ relation }}
-    {%- endcall %}
-  {%- elif relation.type | string == 'table' -%}
-    {#-- Try VIEW first: unit test fixtures are VIEWs even when type='table' (no temp table support) --#}
-    {% call statement('drop_relation_view', auto_begin=False) -%}
-      drop view if exists {{ relation }}
-    {%- endcall %}
-    {% call statement('drop_relation_table', auto_begin=False) -%}
-      drop table if exists {{ relation }}
-    {%- endcall %}
-  {%- else -%}
+  {%- if relation.type is not none and relation.type | string != 'None' -%}
     {%- set drop_type = relation.type | string | replace('_', ' ') -%}
     {% call statement('drop_relation', auto_begin=False) -%}
       drop {{ drop_type }} if exists {{ relation }}
     {%- endcall %}
+  {%- else -%}
+    {#-- Type unknown: query SHOW TABLES to find the actual object type --#}
+    {%- if execute -%}
+      {%- set show_result = run_query('SHOW TABLES IN ' ~ relation.schema ~ ' LIKE \'' ~ relation.identifier ~ '\'') -%}
+      {%- set actual_type = none -%}
+      {%- for row in show_result.rows -%}
+        {%- if row['table_name'] | lower == relation.identifier | lower -%}
+          {%- if row['is_dynamic'] -%}
+            {%- set actual_type = 'dynamic table' -%}
+          {%- elif row['is_materialized_view'] -%}
+            {%- set actual_type = 'materialized view' -%}
+          {%- elif row['is_view'] -%}
+            {%- set actual_type = 'view' -%}
+          {%- else -%}
+            {%- set actual_type = 'table' -%}
+          {%- endif -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {%- if actual_type is not none -%}
+        {% call statement('drop_relation', auto_begin=False) -%}
+          drop {{ actual_type }} if exists {{ relation }}
+        {%- endcall %}
+      {%- endif -%}
+      {#-- Also check streams (not returned by SHOW TABLES) --#}
+      {%- if actual_type is none -%}
+        {%- set stream_result = run_query('SHOW STREAMS IN ' ~ relation.schema) -%}
+        {%- for row in stream_result.rows -%}
+          {%- if row['name'] | lower == relation.identifier | lower -%}
+            {% call statement('drop_relation_stream', auto_begin=False) -%}
+              drop stream if exists {{ relation }}
+            {%- endcall %}
+          {%- endif -%}
+        {%- endfor -%}
+      {%- endif -%}
+    {%- endif -%}
   {%- endif %}
 {% endmacro %}
 

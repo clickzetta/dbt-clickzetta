@@ -103,7 +103,7 @@ class TestDropRelationMacro(MacroTestBase):
     def _drop_sqls(self, rel_type):
         captured = []
         template = self._get_template("adapters.sql", {
-            "statement": _make_statement_capturer(captured)
+            "statement": _make_statement_capturer(captured),
         })
         rel = self._make_relation(rel_type)
         try:
@@ -128,13 +128,17 @@ class TestDropRelationMacro(MacroTestBase):
         sqls = self._drop_sqls("materialized_view")
         self.assertTrue(any("drop materialized view if exists" in s for s in sqls), f"Got: {sqls}")
 
-    def test_drop_none_type_tries_all_types(self):
+    def test_drop_stream(self):
+        sqls = self._drop_sqls("stream")
+        self.assertTrue(any("drop stream if exists" in s for s in sqls), f"Got: {sqls}")
+
+    def test_drop_none_type_requires_db_lookup(self):
+        """When type=None, drop_relation uses SHOW TABLES to discover the actual type.
+        This path requires a real DB connection and is covered by functional tests.
+        Unit test just verifies no SQL is issued without execute=True context."""
         sqls = self._drop_sqls(None)
-        joined = " ".join(sqls)
-        self.assertIn("drop table if exists", joined, f"Got: {sqls}")
-        self.assertIn("drop view if exists", joined, f"Got: {sqls}")
-        self.assertIn("drop dynamic table if exists", joined, f"Got: {sqls}")
-        self.assertIn("drop materialized view if exists", joined, f"Got: {sqls}")
+        # Without execute=True in context, no DROP should be issued
+        self.assertEqual(sqls, [], f"Expected no SQL without execute context, got: {sqls}")
 
 
 class TestRenameRelationMacro(MacroTestBase):
