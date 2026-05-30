@@ -339,6 +339,12 @@ class ClickZettaAdapter(SQLAdapter):
     def valid_incremental_strategies(self):
         return ["append", "merge", "insert_overwrite", "delete+insert"]
 
+    @property
+    def default_python_submission_method(self) -> str:
+        raise NotImplementedError(
+            "Python models are not supported in dbt-clickzetta. Use SQL models instead."
+        )
+
     def standardize_grants_dict(self, grants_table: agate.Table) -> Dict[str, List[str]]:
         # SHOW GRANTS ON TABLE returns columns:
         #   granted_type, privilege, conditions, granted_on, object_name,

@@ -12,6 +12,8 @@ pip install dbt-clickzetta
 
 Requires Python 3.8+ and dbt-core 1.8+.
 
+> **Note on versions:** The legacy `dbt-clickzetta 0.2.x` series on PyPI requires dbt-core ~1.5 and is no longer maintained. Use `dbt-clickzetta >= 1.6` which supports dbt-core 1.8+ and includes full three-part naming (`workspace.schema.table`), incremental strategies, snapshots, and all modern dbt features.
+
 ## Quickstart
 
 ### 1. Configure profiles.yml
