@@ -753,3 +753,233 @@ class TestIncrementalPredicatesCorrectness:
             f"select count(*) from {relation} where region = 'north'", fetch="one"
         )[0]
         assert int(north_count) == 2, f"expected 2 north rows, got {north_count}"
+
+
+# ── 10. incremental delete+insert 正确性 ─────────────────────────────────────
+
+_delete_insert_model_sql = """
+{{ config(
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='order_id'
+) }}
+select
+    order_id,
+    region,
+    amount
+from {{ source('raw', 'di_source') }}
+"""
+
+_di_schema_yml = """
+version: 2
+sources:
+  - name: raw
+    schema: "{{ target.schema }}"
+    tables:
+      - name: di_source
+"""
+
+
+class TestIncrementalDeleteInsertCorrectness:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"di_orders.sql": _delete_insert_model_sql, "schema.yml": _di_schema_yml}
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"name": "delete_insert_correctness"}
+
+    @pytest.fixture(autouse=True)
+    def clean_up(self, project):
+        yield
+        with project.adapter.connection_named("__test"):
+            relation = project.adapter.Relation.create(
+                database=project.database, schema=project.test_schema
+            )
+            project.adapter.drop_schema(relation)
+
+    @pytest.mark.xfail(
+        reason=(
+            "ClickZetta does not support multi-statement execution. "
+            "delete+insert strategy generates 'DELETE ...; INSERT ...' as a single "
+            "statement call, but only the DELETE is executed — the INSERT is silently "
+            "dropped. This is a known adapter limitation. "
+            "Workaround: use merge or insert_overwrite strategy instead."
+        ),
+        strict=True,
+    )
+    def test_delete_insert_replaces_matching_keys(self, project):
+        """
+        delete+insert semantics:
+        - DELETE rows from target where unique_key matches source
+        - INSERT all source rows into target
+        - Rows not in source's unique_key set are preserved
+
+        First run (full load): 3 rows inserted (order_id=1,2,3)
+        Mutate source: update order_id=3 amount, add order_id=4
+        Second run (incremental, no filter): source has all 4 rows
+          → DELETE order_id=1,2,3,4 from target (1,2,3 exist)
+          → INSERT all 4 rows
+          → Result: 4 rows with order_id=3 having new amount
+        """
+        schema = project.test_schema
+        db = project.database
+
+        # Create source table and load initial data (no dt column needed)
+        project.run_sql(
+            f"create table if not exists {db}.{schema}.di_source "
+            f"(order_id int, region string, amount decimal(10,2))"
+        )
+        project.run_sql(
+            f"insert into {db}.{schema}.di_source values "
+            f"(1, 'north', 100), "
+            f"(2, 'south', 200), "
+            f"(3, 'north', 300)"
+        )
+
+        run_dbt(["run"])
+        relation = relation_from_name(project.adapter, "di_orders")
+
+        n = project.run_sql(f"select count(*) from {relation}", fetch="one")[0]
+        assert n == 3, f"expected 3 rows after first run, got {n}"
+
+        # Mutate source: update order_id=3 and add order_id=4
+        project.run_sql(
+            f"update {db}.{schema}.di_source set amount = 999 where order_id = 3"
+        )
+        project.run_sql(
+            f"insert into {db}.{schema}.di_source values "
+            f"(4, 'east', 400)"
+        )
+
+        run_dbt(["run"])
+
+        # Debug: check source table state before second run
+        n_source = project.run_sql(f"select count(*) from {db}.{schema}.di_source", fetch="one")[0]
+        assert n_source == 4, f"expected 4 rows in source before second run, got {n_source}"
+
+        n = project.run_sql(f"select count(*) from {relation}", fetch="one")[0]
+        assert n == 4, f"expected 4 rows after delete+insert, got {n}"
+
+        # order_id=3 should have new amount=999
+        amount_3 = project.run_sql(
+            f"select amount from {relation} where order_id = 3", fetch="one"
+        )[0]
+        assert int(amount_3) == 999, f"expected order_id=3 amount=999 after replace, got {amount_3}"
+
+        # order_id=1,2 should be untouched
+        amount_1 = project.run_sql(
+            f"select amount from {relation} where order_id = 1", fetch="one"
+        )[0]
+        assert int(amount_1) == 100, f"expected order_id=1 amount=100 unchanged, got {amount_1}"
+
+        # order_id=4 should exist
+        n4 = project.run_sql(
+            f"select count(*) from {relation} where order_id = 4", fetch="one"
+        )[0]
+        assert n4 == 1, f"expected order_id=4 to exist, got {n4} rows"
+
+
+# ── 11. 复合主键 merge 正确性 ─────────────────────────────────────────────────
+
+_composite_merge_model_sql = """
+{{ config(
+    materialized='incremental',
+    incremental_strategy='merge',
+    unique_key=['user_id', 'event_date']
+) }}
+select
+    user_id,
+    event_date,
+    event_count,
+    updated_at
+from {{ source('raw', 'user_events') }}
+{% if is_incremental() %}
+where updated_at >= (select max(updated_at) from {{ this }})
+{% endif %}
+"""
+
+_composite_seed_v1_csv = """user_id,event_date,event_count,updated_at
+1,2024-01-01,5,2024-01-01 00:00:00
+1,2024-01-02,3,2024-01-02 00:00:00
+2,2024-01-01,8,2024-01-01 00:00:00
+"""
+
+_composite_seed_v2_csv = """user_id,event_date,event_count,updated_at
+1,2024-01-01,10,2024-01-03 00:00:00
+3,2024-01-01,2,2024-01-03 00:00:00
+"""
+
+_composite_schema_yml = """
+version: 2
+sources:
+  - name: raw
+    schema: "{{ target.schema }}"
+    tables:
+      - name: user_events
+        identifier: "{{ var('seed_name', 'comp_v1') }}"
+"""
+
+
+class TestCompositeKeyMergeCorrectness:
+    @pytest.fixture(scope="class")
+    def seeds(self):
+        return {"comp_v1.csv": _composite_seed_v1_csv, "comp_v2.csv": _composite_seed_v2_csv}
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"user_events.sql": _composite_merge_model_sql, "schema.yml": _composite_schema_yml}
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"name": "composite_merge_correctness"}
+
+    @pytest.fixture(autouse=True)
+    def clean_up(self, project):
+        yield
+        with project.adapter.connection_named("__test"):
+            relation = project.adapter.Relation.create(
+                database=project.database, schema=project.test_schema
+            )
+            project.adapter.drop_schema(relation)
+
+    def test_composite_key_upsert(self, project):
+        """复合主键 merge：(user_id, event_date) 组合唯一，更新已有组合，插入新组合"""
+        run_dbt(["seed"])
+        run_dbt(["run", "--vars", "seed_name: comp_v1"])
+        relation = relation_from_name(project.adapter, "user_events")
+
+        n = project.run_sql(f"select count(*) from {relation}", fetch="one")[0]
+        assert n == 3, f"expected 3 rows after first run, got {n}"
+
+        # 第二次 run：(1, 2024-01-01) 更新 event_count 5→10，新增 (3, 2024-01-01)
+        run_dbt(["run", "--vars", "seed_name: comp_v2"])
+
+        n = project.run_sql(f"select count(*) from {relation}", fetch="one")[0]
+        assert n == 4, f"expected 4 rows after composite merge, got {n}"
+
+        # (user_id=1, event_date=2024-01-01) 的 event_count 应该更新为 10
+        updated = project.run_sql(
+            f"select event_count from {relation} "
+            f"where user_id = 1 and event_date = '2024-01-01'",
+            fetch="one"
+        )[0]
+        assert int(updated) == 10, f"expected event_count=10 after update, got {updated}"
+
+        # (user_id=1, event_date=2024-01-02) 不在增量窗口，保持不变
+        unchanged = project.run_sql(
+            f"select event_count from {relation} "
+            f"where user_id = 1 and event_date = '2024-01-02'",
+            fetch="one"
+        )[0]
+        assert int(unchanged) == 3, f"expected event_count=3 unchanged, got {unchanged}"
+
+        # 新增的 (user_id=3, event_date=2024-01-01) 存在
+        new_row = project.run_sql(
+            f"select event_count from {relation} "
+            f"where user_id = 3 and event_date = '2024-01-01'",
+            fetch="one"
+        )
+        assert new_row is not None, "expected new row (user_id=3, event_date=2024-01-01)"
+        assert int(new_row[0]) == 2, f"expected event_count=2 for new row, got {new_row[0]}"
+
