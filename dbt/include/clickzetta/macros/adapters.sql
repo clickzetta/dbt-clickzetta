@@ -742,6 +742,43 @@
 {% endmacro %}
 
 
+{#--
+  ── Table Stream notes ────────────────────────────────────────────────────────
+
+  ClickZetta Table Streams are NOT created by dbt materializations — they must
+  be created manually (or via pre_hook) before being used as dbt sources.
+
+  Required syntax (TABLE_STREAM_MODE is mandatory):
+    CREATE TABLE STREAM <schema>.<name>
+      ON TABLE <schema>.<source_table>
+      WITH PROPERTIES ('TABLE_STREAM_MODE' = 'STANDARD')   -- or 'APPEND_ONLY'
+
+  SHOW_INITIAL_ROWS behavior:
+    WITH PROPERTIES ('TABLE_STREAM_MODE' = 'STANDARD', 'SHOW_INITIAL_ROWS' = 'TRUE')
+    SHOW_INITIAL_ROWS only captures rows that exist in the source table AT THE TIME
+    the stream is created. Rows inserted AFTER stream creation appear as normal
+    change events (INSERT __change_type), not as initial rows.
+    Correct order: INSERT data → CREATE STREAM (with SHOW_INITIAL_ROWS=TRUE)
+
+  Stream COMMENT support:
+    CREATE TABLE STREAM <name> ON TABLE <source>
+      WITH PROPERTIES ('TABLE_STREAM_MODE' = 'STANDARD')
+      COMMENT 'description of this stream'
+    Visible via: DESC STREAM <name>
+
+  Stream as dbt source:
+    Define in sources.yml with schema pointing to the stream's schema.
+    System columns (__change_type, __commit_version, __commit_timestamp) are
+    accessible in SELECT. get_columns_in_relation() returns [] for streams
+    (system columns are filtered) — this is intentional.
+
+  Dependency declaration for pre_hook streams:
+    If a dbt model creates a stream via pre_hook and another model reads it,
+    declare the dependency explicitly:
+      -- depends_on: {{ ref('model_that_creates_stream') }}
+--#}
+
+
 {% macro clickzetta__make_temp_relation(base_relation, suffix) %}
     {% set tmp_identifier = base_relation.identifier ~ suffix %}
     {% set tmp_relation = base_relation.incorporate(path = {

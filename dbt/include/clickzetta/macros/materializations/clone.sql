@@ -1,28 +1,42 @@
 {% materialization clone, adapter='clickzetta' %}
   {#--
-    零拷贝克隆 materialization。
-    支持两种场景：
-    1. 零拷贝克隆（CI/CD 环境隔离）：CREATE TABLE t CLONE source
-    2. Time Travel 克隆（数据回溯）：CREATE TABLE t CLONE source TIMESTAMP AS OF <expression>
+    Zero-copy clone materialization.
+    Supports two scenarios:
+    1. Zero-copy clone (CI/CD environment isolation): CREATE TABLE t CLONE source
+    2. Time Travel clone (data recovery): CREATE TABLE t CLONE source TIMESTAMP AS OF <expression>
 
-    必填 config：
-      source: 源表的完整名称，如 'example.fct_orders_partitioned'
+    Required config:
+      source: fully-qualified source table name, e.g. 'example.fct_orders_partitioned'
 
-    可选 config：
-      at_timestamp: Time Travel 时间戳表达式，如 "'2024-01-05 15:00:00'"
-                    支持：字符串时间戳、timestamp 表达式、interval 表达式
-                    语法：TIMESTAMP AS OF <expression>
+    Optional config:
+      at_timestamp: Time Travel timestamp expression, e.g. "'2024-01-05 15:00:00'"
+                    Supports: string timestamp, timestamp expression, interval expression
+                    Syntax: TIMESTAMP AS OF <expression>
+                    Constraint: the timestamp must be >= the table's creation time.
+                    For interval expressions like "current_timestamp() - interval 1 hours",
+                    the source table must have existed for at least that duration.
 
-    用法：
-      -- 零拷贝克隆
+    IMPORTANT — dependency declaration:
+      The 'source' config is a plain string, so dbt cannot infer the dependency
+      automatically. If the source table is also a dbt model, you must declare the
+      dependency explicitly to ensure correct execution order:
+
+        -- depends_on: {{ ref('source_table_model_name') }}
+
+      Without this, dbt may try to clone the source before it exists.
+
+    Usage:
+      -- Zero-copy clone
       {{ config(materialized='clone', source='example.fct_orders_partitioned') }}
+      -- depends_on: {{ ref('fct_orders_partitioned') }}
 
-      -- Time Travel 克隆
+      -- Time Travel clone
       {{ config(
           materialized='clone',
           source='example.fct_orders_partitioned',
           at_timestamp="'2024-01-05 15:00:00'"
       ) }}
+      -- depends_on: {{ ref('fct_orders_partitioned') }}
   --#}
 
   {%- set target_relation = this.incorporate(type='table') -%}

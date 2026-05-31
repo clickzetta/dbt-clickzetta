@@ -1,5 +1,18 @@
 {% materialization dynamic_table, adapter='clickzetta' %}
 
+  {#--
+    Dynamic table materialization — declarative incremental refresh.
+    The system automatically tracks upstream changes (INSERT/UPDATE/DELETE)
+    and incrementally refreshes the table on schedule.
+
+    Key behaviors:
+    - Schema is FIXED at creation time. If the upstream source table adds a column,
+      the dynamic table will NOT automatically include it — even if the model uses
+      SELECT *. To pick up schema changes, run: dbt run --full-refresh
+    - refresh_interval drives automatic refresh; no Studio scheduling needed.
+    - Manual refresh: REFRESH DYNAMIC TABLE <name>
+  --#}
+
   {% set existing_relation = load_cached_relation(this) %}
   {% set target_relation = this.incorporate(type=this.DynamicTable) %}
 
