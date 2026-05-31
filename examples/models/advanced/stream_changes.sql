@@ -12,7 +12,13 @@
 -- 1. SELECT * — returns all user columns + system columns (works fine)
 -- 2. SELECT * EXCEPT(...) — returns only user columns, no hardcoded column list
 -- 3. Explicit column list — most portable, recommended for production
-{{ config(materialized='view') }}
+{{ config(
+    materialized='view',
+    pre_hook="CREATE TABLE STREAM IF NOT EXISTS {{ target.schema }}.orders_stream ON TABLE {{ target.schema }}.fct_orders_incremental WITH PROPERTIES ('TABLE_STREAM_MODE' = 'STANDARD')"
+) }}
+
+-- depends_on: {{ ref('fct_orders_incremental') }}
+-- Ensures fct_orders_incremental is built before this model's pre_hook fires.
 
 -- Pattern 1: explicit columns (production-safe, schema changes require manual update)
 select

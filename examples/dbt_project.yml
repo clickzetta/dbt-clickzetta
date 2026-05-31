@@ -13,6 +13,14 @@ test-paths: ["tests"]
 target-path: "target"
 clean-targets: ["target", "dbt_packages"]
 
+on-run-end:
+  # Create the orders_stream used by stream_changes model.
+  # Runs after all models so fct_orders_incremental exists first.
+  # IF NOT EXISTS ensures this is idempotent across runs.
+  - "CREATE TABLE STREAM IF NOT EXISTS {{ target.schema }}.orders_stream ON TABLE {{ target.schema }}.fct_orders_incremental WITH PROPERTIES ('TABLE_STREAM_MODE' = 'STANDARD')"
+
+
+
 models:
   clickzetta_example:
     staging:
