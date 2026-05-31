@@ -26,6 +26,7 @@ from dbt_common.clients.agate_helper import DEFAULT_TYPE_TESTER
 from dbt.adapters.contracts.connection import AdapterResponse
 from dbt.adapters.events.logging import AdapterLogger
 from dbt_common.utils import AttrDict
+from dbt.adapters.clickzetta.python_model import ClickZettaPythonJobHelper
 
 GET_COLUMNS_IN_RELATION_RAW_MACRO_NAME = "get_columns_in_relation_raw"
 LIST_SCHEMAS_MACRO_NAME = "list_schemas"
@@ -432,9 +433,14 @@ class ClickZettaAdapter(SQLAdapter):
 
     @property
     def default_python_submission_method(self) -> str:
-        raise NotImplementedError(
-            "Python models are not supported in dbt-clickzetta. Use SQL models instead."
-        )
+        return "zettapark"
+
+    @property
+    def python_submission_helpers(self):
+        return {"zettapark": ClickZettaPythonJobHelper}
+
+    def generate_python_submission_response(self, submission_result) -> AdapterResponse:
+        return submission_result
 
     def standardize_grants_dict(self, grants_table: agate.Table) -> Dict[str, List[str]]:
         # SHOW GRANTS ON TABLE returns columns:
