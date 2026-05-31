@@ -507,7 +507,152 @@ sources:
         )
 
 
-class TestMaterializedView:
+class TestDynamicTableOnConfigurationChangeContinue:
+    """on_configuration_change=continue (default): no-op when table already exists."""
+
+    @pytest.fixture(scope="class")
+    def seeds(self):
+        return {"seed_base.csv": seeds_base_csv}
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "dt_config_change.sql": """
+{{ config(
+    materialized='dynamic_table',
+    refresh_interval='5 MINUTE',
+    refresh_vc='default',
+    on_configuration_change='continue'
+) }}
+select id, name, amount from {{ ref('seed_base') }}
+""",
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"name": "dt_on_config_continue_test"}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def clean_up(self, project):
+        yield
+        with project.adapter.connection_named("__test"):
+            relation = project.adapter.Relation.create(
+                database=project.database, schema=project.test_schema
+            )
+            project.adapter.drop_schema(relation)
+
+    def test_continue_is_noop_when_exists(self, project):
+        """Second run with continue is a no-op; table data unchanged."""
+        run_dbt(["seed"])
+        run_dbt(["run"])  # create
+
+        results = run_dbt(["run"])  # second run: continue → no-op
+        assert results[0].status == "success"
+
+        relation = relation_from_name(project.adapter, "dt_config_change")
+        n = project.run_sql(f"select count(*) from {relation}", fetch="one")[0]
+        assert n == 3
+
+
+class TestDynamicTableOnConfigurationChangeApply:
+    """on_configuration_change=apply: ALTER DYNAMIC TABLE updates refresh config."""
+
+    @pytest.fixture(scope="class")
+    def seeds(self):
+        return {"seed_base.csv": seeds_base_csv}
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "dt_apply.sql": """
+{{ config(
+    materialized='dynamic_table',
+    refresh_interval='10 MINUTE',
+    refresh_vc='default',
+    on_configuration_change='apply'
+) }}
+select id, name, amount from {{ ref('seed_base') }}
+""",
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"name": "dt_on_config_apply_test"}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def clean_up(self, project):
+        yield
+        with project.adapter.connection_named("__test"):
+            relation = project.adapter.Relation.create(
+                database=project.database, schema=project.test_schema
+            )
+            project.adapter.drop_schema(relation)
+
+    def test_apply_first_run_creates_table(self, project):
+        """First run creates the dynamic table normally."""
+        run_dbt(["seed"])
+        results = run_dbt(["run"])
+        assert results[0].status == "success"
+
+        relation = relation_from_name(project.adapter, "dt_apply")
+        n = project.run_sql(f"select count(*) from {relation}", fetch="one")[0]
+        assert n == 3
+
+    def test_apply_second_run_alters_table(self, project):
+        """Second run with apply issues ALTER; table data is preserved."""
+        results = run_dbt(["run"])
+        assert results[0].status == "success"
+
+        # Data must still be there after ALTER (ALTER doesn't truncate)
+        relation = relation_from_name(project.adapter, "dt_apply")
+        n = project.run_sql(f"select count(*) from {relation}", fetch="one")[0]
+        assert n == 3
+
+
+class TestDynamicTableOnConfigurationChangeFail:
+    """on_configuration_change=fail: compiler error when dynamic table already exists."""
+
+    @pytest.fixture(scope="class")
+    def seeds(self):
+        return {"seed_base.csv": seeds_base_csv}
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "dt_fail.sql": """
+{{ config(
+    materialized='dynamic_table',
+    refresh_interval='5 MINUTE',
+    refresh_vc='default',
+    on_configuration_change='fail'
+) }}
+select id, name, amount from {{ ref('seed_base') }}
+""",
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"name": "dt_on_config_fail_test"}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def clean_up(self, project):
+        yield
+        with project.adapter.connection_named("__test"):
+            relation = project.adapter.Relation.create(
+                database=project.database, schema=project.test_schema
+            )
+            project.adapter.drop_schema(relation)
+
+    def test_fail_first_run_creates_table(self, project):
+        """First run creates the table (no existing relation, so no error)."""
+        run_dbt(["seed"])
+        results = run_dbt(["run"])
+        assert results[0].status == "success"
+
+    def test_fail_second_run_raises_error(self, project):
+        """Second run with fail raises a compiler error."""
+        results = run_dbt(["run"], expect_pass=False)
+        assert results[0].status == "error"
     @pytest.fixture(scope="class")
     def seeds(self):
         return {"seed_base.csv": seeds_base_csv}

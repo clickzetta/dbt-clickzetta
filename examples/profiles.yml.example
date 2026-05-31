@@ -1,12 +1,48 @@
+# ClickZetta 连接配置模板
+#
+# 使用方法：
+#   cp profiles.yml.example profiles.yml
+#   填入你的实际连接信息（此文件已加入 .gitignore，不会被提交）
+#
+# 多环境配置说明：docs/profiles-and-environments.md
+# 各区域 service 端点：docs/profiles-and-environments.md#各区域-service-端点
+
 clickzetta_example:
   target: dev
   outputs:
+
+    # 开发环境：schema 加 _dev 后缀，与生产完全隔离
     dev:
       type: clickzetta
-      service: cn-shanghai-alicloud.api.clickzetta.com  # 见下方区域端点表
-      instance: your_instance      # ClickZetta 实例 ID，如 f8866243
-      workspace: your_workspace    # 工作空间名称，如 quick_start
+      service: cn-shanghai-alicloud.api.clickzetta.com
+      instance: your_instance        # 实例 ID，在控制台「实例管理」页面查看
+      workspace: your_workspace      # 工作空间名称，在控制台「工作空间」页面查看
       username: your_username
       password: your_password
-      schema: example              # 模型写入的 schema，不存在会自动创建
-      vcluster: default_ap         # 计算集群名称，如 default_ap
+      schema: dev                    # 基础 schema，各层拼接为 staging_dev / marts_dev 等
+      vcluster: default              # 计算集群名称，在控制台「计算集群」页面查看
+      query_tag: "dbt_dev"           # 可选，在作业历史里标记来源
+
+    # 生产环境：dbt run --target prod
+    prod:
+      type: clickzetta
+      service: cn-shanghai-alicloud.api.clickzetta.com
+      instance: your_instance
+      workspace: your_workspace
+      username: your_username
+      password: your_password
+      schema: default                # 各层直接用 staging / marts，不加后缀
+      vcluster: default
+      query_tag: "dbt_prod"
+
+    # CI 环境（可选）：dbt run --target ci --vars '{"pr_number": "42"}'
+    ci:
+      type: clickzetta
+      service: cn-shanghai-alicloud.api.clickzetta.com
+      instance: your_instance
+      workspace: your_workspace
+      username: your_username
+      password: your_password
+      schema: "ci_{{ var('pr_number', 'local') }}"
+      vcluster: default
+      query_tag: "dbt_ci"

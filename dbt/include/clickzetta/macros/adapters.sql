@@ -6,6 +6,44 @@
     cast({{ field }} as {{ clean_type }})
 {% endmacro %}
 
+{# ------- QUERY COMMENT ------- #}
+
+{#
+  Inject dbt metadata as a SQL comment on every query.
+  Visible in Lakehouse query history for debugging and cost attribution.
+
+  Default format (JSON):
+    /* {"app": "dbt", "dbt_version": "1.8.x", "profile_name": "my_project",
+        "target_name": "dev", "node_id": "model.my_project.my_model"} */
+
+  To enable, add to profiles.yml:
+    query_comment:
+      comment: "{{ query_comment(node) }}"
+      append: true   # append after SQL (avoids breaking COPY INTO / PUT detection)
+
+  Or disable entirely:
+    query_comment: null
+#}
+{% macro clickzetta__query_comment(node) %}
+  {%- set comment_dict = {} -%}
+  {%- do comment_dict.update(app="dbt") -%}
+  {%- do comment_dict.update(
+      dbt_version=dbt_version,
+      profile_name=target.get('profile_name', ''),
+      target_name=target.name
+  ) -%}
+  {%- if node is not none -%}
+    {%- do comment_dict.update(node_id=node.unique_id) -%}
+    {%- if node.resource_type == 'model' -%}
+      {%- do comment_dict.update(
+          node_name=node.name,
+          materialized=node.config.get('materialized', '')
+      ) -%}
+    {%- endif -%}
+  {%- endif -%}
+  {{ return(tojson(comment_dict)) }}
+{% endmacro %}
+
 {# ------- GRANTS ------- #}
 
 {% macro clickzetta__copy_grants() %}
@@ -862,3 +900,18 @@
     INITIALIZE = {{ initialize }}
   {% endif %}
 {%- endmacro -%}
+
+{#
+  Manually trigger a refresh of a dynamic table.
+  Usage:
+    dbt run-operation refresh_dynamic_table --args '{model_name: my_dynamic_table}'
+#}
+{% macro refresh_dynamic_table(model_name) %}
+  {% if execute %}
+    {% set relation = ref(model_name) %}
+    {% call statement('refresh_dynamic_table') %}
+      refresh dynamic table {{ relation }}
+    {% endcall %}
+    {{ log("Refreshed dynamic table: " ~ relation, info=true) }}
+  {% endif %}
+{% endmacro %}

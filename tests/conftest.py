@@ -17,6 +17,7 @@ def dbt_profile_target():
         "workspace": os.getenv("CLICKZETTA_TEST_WORKSPACE"),
         "username": os.getenv("CLICKZETTA_TEST_USERNAME"),
         "password": os.getenv("CLICKZETTA_TEST_PASSWORD"),
-        "vcluster": os.getenv("CLICKZETTA_TEST_VCLUSTER", "default_ap"),
+        "vcluster": os.getenv("CLICKZETTA_TEST_VCLUSTER", "default"),
         "schema": os.getenv("CLICKZETTA_TEST_SCHEMA", "dbt_test"),
+        "query_tag": os.getenv("CLICKZETTA_TEST_QUERY_TAG", "dbt_test"),
     }

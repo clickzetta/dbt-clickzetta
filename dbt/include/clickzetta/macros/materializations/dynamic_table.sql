@@ -11,6 +11,12 @@
       SELECT *. To pick up schema changes, run: dbt run --full-refresh
     - refresh_interval drives automatic refresh; no Studio scheduling needed.
     - Manual refresh: REFRESH DYNAMIC TABLE <name>
+
+    on_configuration_change:
+    - continue (default): no-op when table already exists
+    - apply: CREATE OR REPLACE to update refresh_interval/refresh_vc/SQL
+      (ClickZetta does not support ALTER DYNAMIC TABLE for config changes)
+    - fail: raise compiler error when table already exists
   --#}
 
   {% set existing_relation = load_cached_relation(this) %}
@@ -34,19 +40,31 @@
 {% macro dynamic_table_get_build_sql(existing_relation, target_relation) %}
     {#--
       Scenarios:
-      1. existing_relation is none → CREATE (new table)
+      1. existing_relation is none → CREATE
       2. existing_relation exists but is not a dynamic table → REPLACE (type changed)
-      3. existing_relation is a dynamic table → no-op (no ALTER support yet)
-      4. full_refresh → REPLACE
+      3. existing_relation is a dynamic table + full_refresh → REPLACE
+      4. on_configuration_change=apply → REPLACE (CREATE OR REPLACE updates config + SQL)
+      5. on_configuration_change=fail → raise compiler error
+      6. on_configuration_change=continue (default) → no-op
     --#}
     {% set full_refresh_mode = should_full_refresh() %}
+    {% set on_config_change = config.get('on_configuration_change', 'continue') | lower %}
 
     {% if existing_relation is none %}
         {% set build_sql = clickzetta__create_dynamic_table_as(target_relation, sql) %}
     {% elif full_refresh_mode or not existing_relation.is_dynamic_table %}
         {% set build_sql = clickzetta__replace_dynamic_table_as(target_relation, sql) %}
+    {% elif on_config_change == 'apply' %}
+        {#-- ClickZetta does not support ALTER DYNAMIC TABLE for refresh config changes.
+             CREATE OR REPLACE atomically updates refresh_interval, refresh_vc, and SQL. --#}
+        {% set build_sql = clickzetta__replace_dynamic_table_as(target_relation, sql) %}
+    {% elif on_config_change == 'fail' %}
+        {{ exceptions.raise_compiler_error(
+            "Dynamic table '" ~ target_relation ~ "' already exists. "
+            ~ "Set on_configuration_change='apply' to recreate it, or run with --full-refresh."
+        ) }}
     {% else %}
-        {#-- Dynamic table exists and no full_refresh: no-op (data refreshed by schedule) --#}
+        {#-- continue (default): no-op, data refreshed by schedule --#}
         {% set build_sql = '' %}
     {% endif %}
 
@@ -87,4 +105,3 @@
     {% do persist_docs(target_relation, model) %}
 
 {% endmacro %}
-

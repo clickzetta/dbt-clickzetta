@@ -49,6 +49,7 @@ class ClickZettaCredentials(Credentials):
     connect_retries: int = 3
     reuse_connections: bool = True
     split_size: Optional[int] = 64 * 1024 * 1024
+    query_tag: Optional[str] = None
 
     @classmethod
     def __pre_deserialize__(cls, data):
@@ -79,6 +80,7 @@ class ClickZettaCredentials(Credentials):
             "password",
             "service",
             "database",
+            "query_tag",
         )
 
 
@@ -121,6 +123,12 @@ class ClickZettaConnectionManager(SQLConnectionManager):
                 service=creds.service,
             )
             handle = ClickZettaConnection(client=client)
+
+            if creds.query_tag:
+                escaped = creds.query_tag.replace("'", "''")
+                cursor = handle.cursor()
+                cursor.execute(f"SET query_tag = '{escaped}'")
+                cursor.close()
 
             return handle
 

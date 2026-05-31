@@ -59,7 +59,9 @@ pip install dbt-clickzetta
 cp profiles.yml.example profiles.yml
 ```
 
-然后编辑 `profiles.yml`（此文件已加入 `.gitignore`，不会被提交到 git）：
+然后编辑 `profiles.yml`（此文件已加入 `.gitignore`，不会被提交到 git）。
+
+`profiles.yml.example` 包含三个环境配置（dev / prod / ci），本示例项目只需填 dev：
 
 ```yaml
 clickzetta_example:
@@ -73,8 +75,21 @@ clickzetta_example:
       username: your_username
       password: your_password
       schema: example              # 模型写入的 schema，不存在会自动创建
-      vcluster: default_ap         # 计算集群名称，如 default_ap
+      vcluster: default            # 计算集群名称
+      query_tag: "dbt_dev"         # 可选，在作业历史里标记来源
 ```
+
+**多环境说明（ClickZetta 推荐架构）：**
+
+ClickZetta 的对象层级是 `Instance → Workspace → Schema`，dbt 多环境推荐用**同一 Workspace、不同 Schema 前缀**隔离：
+
+| 环境 | schema 示例 | 说明 |
+|---|---|---|
+| dev | `staging_dev` / `marts_dev` | 开发调试，不影响生产 |
+| prod | `staging` / `marts` | 正式数据，通过 CI/CD 发布 |
+| ci | `ci_<pr号>` | PR 合并前自动测试，测试完清理 |
+
+分层方式不限：dbt 推荐 `staging/intermediate/marts`，也可以用大奖牌模式 `bronze/silver/gold`，或传统 `ods/dwd/ads`。详见 `profiles.yml.example` 和 [docs/README.md](../docs/README.md)。
 
 **各区域 service 端点：**
 
@@ -248,8 +263,8 @@ where updated_at > (select max(updated_at) from {{ this }})
 ```sql
 {{ config(
     materialized='dynamic_table',
-    refresh_interval='5 minutes',  -- 刷新间隔，支持 minutes / hours
-    refresh_vc='default'        -- 指定刷新使用的 vcluster
+    refresh_interval='5 MINUTE',   -- 刷新间隔：N MINUTE / N HOUR / N DAY（大写，单数）
+    refresh_vc='default'           -- 指定刷新使用的 vcluster
 ) }}
 ```
 

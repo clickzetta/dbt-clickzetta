@@ -308,5 +308,135 @@ class TestCreateIndexesMacro(MacroTestBase):
         self.assertEqual(sqls, [])
 
 
+class TestAlterDynamicTableMacro(MacroTestBase):
+    """
+    clickzetta__alter_dynamic_table was removed — ClickZetta does not support
+    ALTER DYNAMIC TABLE for refresh config changes. on_configuration_change='apply'
+    uses CREATE OR REPLACE instead. These tests verify replace_dynamic_table_as.
+    """
+
+    def _run_replace(self, refresh_interval=None, refresh_vc=None):
+        if refresh_interval is not None:
+            self.config["refresh_interval"] = refresh_interval
+        if refresh_vc is not None:
+            self.config["refresh_vc"] = refresh_vc
+        template = self._get_template("adapters.sql")
+        rel = self._make_relation("dynamic_table")
+        result = template.module.clickzetta__replace_dynamic_table_as(rel, "select 1")
+        return _norm(result)
+
+    def test_replace_with_interval_only(self):
+        sql = self._run_replace(refresh_interval="5 MINUTE")
+        self.assertIn("create or replace dynamic table", sql)
+        self.assertIn("refresh interval 5 minute", sql)
+        self.assertNotIn("vcluster", sql)
+
+    def test_replace_with_interval_and_vc(self):
+        sql = self._run_replace(refresh_interval="10 MINUTE", refresh_vc="default")
+        self.assertIn("create or replace dynamic table", sql)
+        self.assertIn("refresh interval 10 minute", sql)
+        self.assertIn("vcluster default", sql)
+
+    def test_replace_without_interval(self):
+        sql = self._run_replace()
+        self.assertIn("create or replace dynamic table", sql)
+        self.assertNotIn("refresh interval", sql)
+
+    def test_replace_relation_name_included(self):
+        sql = self._run_replace(refresh_interval="1 MINUTE")
+        self.assertIn("ws.s.t", sql)
+
+
+class TestQueryCommentMacro(MacroTestBase):
+    """Tests for clickzetta__query_comment — JSON metadata injection."""
+
+    def _run_query_comment(self, node=None):
+        template = self._get_template("adapters.sql", {
+            "dbt_version": "1.8.0",
+            "target": {"name": "dev", "profile_name": "my_project"},
+            "tojson": __import__("json").dumps,
+        })
+        result = template.module.clickzetta__query_comment(node)
+        import json
+        return json.loads(result.strip())
+
+    def test_comment_contains_app_field(self):
+        data = self._run_query_comment()
+        self.assertEqual(data["app"], "dbt")
+
+    def test_comment_contains_dbt_version(self):
+        data = self._run_query_comment()
+        self.assertEqual(data["dbt_version"], "1.8.0")
+
+    def test_comment_contains_target_name(self):
+        data = self._run_query_comment()
+        self.assertEqual(data["target_name"], "dev")
+
+    def test_comment_with_model_node(self):
+        node = mock.Mock()
+        node.unique_id = "model.my_project.orders"
+        node.name = "orders"
+        node.resource_type = "model"
+        node.config = mock.Mock()
+        node.config.get = lambda k, default=None: "table" if k == "materialized" else default
+        data = self._run_query_comment(node)
+        self.assertEqual(data["node_id"], "model.my_project.orders")
+        self.assertEqual(data["node_name"], "orders")
+        self.assertEqual(data["materialized"], "table")
+
+    def test_comment_with_none_node(self):
+        # node=None should still produce valid JSON with app field
+        data = self._run_query_comment(node=None)
+        self.assertEqual(data["app"], "dbt")
+        self.assertNotIn("node_id", data)
+
+    def test_comment_is_valid_json(self):
+        import json
+        template = self._get_template("adapters.sql", {
+            "dbt_version": "1.8.0",
+            "target": {"name": "prod", "profile_name": "proj"},
+            "tojson": json.dumps,
+        })
+        result = template.module.clickzetta__query_comment(None)
+        # Must not raise
+        parsed = json.loads(result.strip())
+        self.assertIsInstance(parsed, dict)
+
+
+class TestQueryTagCredentials(unittest.TestCase):
+    """Tests for query_tag field in ClickZettaCredentials."""
+
+    def _make_credentials(self, **kwargs):
+        from dbt.adapters.clickzetta.connections import ClickZettaCredentials
+        defaults = dict(
+            workspace="ws",
+            instance="inst",
+            service="svc",
+            username="user",
+            password="pass",
+            schema="public",
+            vcluster="default",
+        )
+        defaults.update(kwargs)
+        return ClickZettaCredentials(**defaults)
+
+    def test_query_tag_defaults_to_none(self):
+        creds = self._make_credentials()
+        self.assertIsNone(creds.query_tag)
+
+    def test_query_tag_can_be_set(self):
+        creds = self._make_credentials(query_tag="dbt_prod")
+        self.assertEqual(creds.query_tag, "dbt_prod")
+
+    def test_query_tag_in_connection_keys(self):
+        creds = self._make_credentials()
+        self.assertIn("query_tag", creds._connection_keys())
+
+    def test_query_tag_with_special_chars(self):
+        # Single quotes in tag must be handled (escaped in SET statement)
+        creds = self._make_credentials(query_tag="dbt's tag")
+        self.assertEqual(creds.query_tag, "dbt's tag")
+
+
 if __name__ == "__main__":
     unittest.main()

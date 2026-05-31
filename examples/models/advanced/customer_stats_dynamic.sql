@@ -2,7 +2,7 @@
 -- refresh_vc 替换为你环境中实际的 vcluster 名称
 {{ config(
     materialized='dynamic_table',
-    refresh_interval='5 minutes',
+    refresh_interval='5 MINUTE',
     refresh_vc='default'
 ) }}
 
