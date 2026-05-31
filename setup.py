@@ -56,6 +56,9 @@ setup(
         "dbt-core>=1.8.0,<2.0.0",
         "clickzetta-connector>=1.0.0",
     ],
+    extras_require={
+        "python": ["clickzetta-zettapark-python>=0.1.5"],
+    },
     zip_safe=False,
     classifiers=[
         "Development Status :: 3 - Alpha",

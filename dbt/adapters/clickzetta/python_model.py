@@ -16,7 +16,6 @@ The returned DataFrame is written to the target relation automatically.
 """
 
 from typing import Any, Dict
-from urllib.parse import urlparse, parse_qs
 
 from dbt.adapters.base.impl import PythonJobHelper
 from dbt.adapters.contracts.connection import AdapterResponse
@@ -58,44 +57,25 @@ class DbtZettaPark:
 def _build_session(credentials):
     """
     Build a ZettaPark Session from dbt credentials.
-    Uses clickzetta_dbutils.get_active_lakehouse_engine() to obtain a magic_token
-    when running inside a Studio Python Task environment.
+
+    Two paths:
+    - Studio Python Task environment: uses clickzetta_dbutils.get_active_lakehouse_engine()
+      to obtain a magic_token (pre-injected by the Studio runtime).
+    - Local / CI environment: uses service/instance/username/password from profiles.yml.
     """
     try:
         from clickzetta.zettapark.session import Session
     except ImportError:
         raise RuntimeError(
-            "Python models require the clickzetta-zettapark-python package, "
-            "which is pre-installed in ClickZetta Studio Python Task environments. "
-            "Python models must be run via Studio — they cannot be executed locally."
+            "Python models require clickzetta-zettapark-python. "
+            "Install it with: pip install clickzetta-zettapark-python"
         )
 
-    # Try to get magic_token from the Studio environment (pre-injected engine)
-    magic_token = None
     service = getattr(credentials, "service", None)
     instance = getattr(credentials, "instance", None)
     workspace = getattr(credentials, "workspace", None)
     schema = getattr(credentials, "schema", "public")
     vcluster = getattr(credentials, "vcluster", "default")
-
-    try:
-        import clickzetta_dbutils as dbutils
-        engine = dbutils.get_active_lakehouse_engine()
-        url_str = str(engine.url)
-        parsed = urlparse(url_str.replace("clickzetta://", "https://"))
-        params = parse_qs(parsed.query)
-        magic_token = params.get("magic_token", [None])[0]
-        # Override connection params from engine URL (more reliable in Studio env)
-        full_host = parsed.hostname or ""
-        parts = full_host.split(".", 1)
-        if len(parts) == 2:
-            instance = parts[0]
-            service = parts[1]
-        workspace = parsed.path.lstrip("/") or workspace
-        schema = params.get("schema", [schema])[0]
-        vcluster = params.get("virtualcluster", [vcluster])[0]
-    except Exception:
-        pass  # Fall back to credentials-based auth below
 
     config = {
         "service": service,
@@ -105,13 +85,32 @@ def _build_session(credentials):
         "vcluster": vcluster,
     }
 
-    if magic_token:
-        config["magic_token"] = magic_token
-    else:
-        # Fall back to username/password from credentials
-        config["username"] = getattr(credentials, "username", None)
-        config["password"] = getattr(credentials, "password", None)
+    # Try Studio environment first: get magic_token from pre-injected engine
+    try:
+        import clickzetta_dbutils as dbutils
+        from urllib.parse import urlparse, parse_qs
+        engine = dbutils.get_active_lakehouse_engine()
+        url_str = str(engine.url)
+        parsed = urlparse(url_str.replace("clickzetta://", "https://"))
+        params = parse_qs(parsed.query)
+        magic_token = params.get("magic_token", [None])[0]
+        if magic_token:
+            full_host = parsed.hostname or ""
+            parts = full_host.split(".", 1)
+            if len(parts) == 2:
+                config["instance"] = parts[0]
+                config["service"] = parts[1]
+            config["workspace"] = parsed.path.lstrip("/") or workspace
+            config["schema"] = params.get("schema", [schema])[0]
+            config["vcluster"] = params.get("virtualcluster", [vcluster])[0]
+            config["magic_token"] = magic_token
+            return Session.builder.configs(config).getOrCreate()
+    except Exception:
+        pass  # Not in Studio environment, fall through to credentials-based auth
 
+    # Local / CI: use username/password from profiles.yml
+    config["username"] = getattr(credentials, "username", None)
+    config["password"] = getattr(credentials, "password", None)
     return Session.builder.configs(config).getOrCreate()
 
 
