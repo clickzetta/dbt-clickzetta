@@ -1,9 +1,7 @@
 """
 ClickZetta ZettaPark Python model support.
 
-Python models run inside ClickZetta Studio Python Task environments,
-where clickzetta-zettapark-python is pre-installed. The package is not
-available on PyPI — it is only available in the Studio execution environment.
+Install with: pip install "dbt-clickzetta[python]"
 
 Usage in a dbt model file (e.g. models/my_model.py):
 
@@ -13,12 +11,18 @@ Usage in a dbt model file (e.g. models/my_model.py):
         return df
 
 The returned DataFrame is written to the target relation automatically.
+
+Packages declared in dbt.config(packages=[...]) are installed automatically
+before the model runs, in both local and Studio environments.
 """
 
 from typing import Any, Dict
 
 from dbt.adapters.base.impl import PythonJobHelper
 from dbt.adapters.contracts.connection import AdapterResponse
+from dbt.adapters.events.logging import AdapterLogger
+
+logger = AdapterLogger(__name__)
 
 
 class DbtZettaPark:
@@ -36,9 +40,7 @@ class DbtZettaPark:
         self._config.update(kwargs)
 
     def ref(self, *args):
-        # args: (model_name,) or (package_name, model_name)
         name = args[-1]
-        # Build fully-qualified name using the model's database and schema
         database = self._parsed_model.get("database", "")
         schema = self._parsed_model.get("schema", "")
         if database and schema:
@@ -117,6 +119,58 @@ def _build_session(credentials):
     return Session.builder.configs(config).getOrCreate()
 
 
+def _collect_config(model_fn: Any, dbt_obj: "DbtZettaPark") -> None:
+    """
+    Call model() with a mock session to collect dbt.config() settings
+    (including packages) without executing any real queries.
+    """
+    class _MockSession:
+        def sql(self, *a, **kw): return self
+        def table(self, *a, **kw): return self
+        def filter(self, *a, **kw): return self
+        def select(self, *a, **kw): return self
+        def to_pandas(self, *a, **kw):
+            import pandas as pd
+            return pd.DataFrame()
+        def createDataFrame(self, *a, **kw): return self
+        def count(self, *a, **kw): return 0
+        def show(self, *a, **kw): pass
+        def collect(self, *a, **kw): return []
+        @property
+        def write(self): return self
+        def mode(self, *a, **kw): return self
+        def save_as_table(self, *a, **kw): pass
+
+    try:
+        model_fn(dbt_obj, _MockSession())
+    except Exception:
+        pass  # Expected — mock session will fail on real operations
+
+
+def _install_packages_list(packages: list) -> None:
+    """Install a list of Python packages via pip in the current environment."""
+    import subprocess
+    import sys
+
+    logger.info(f"Installing packages for Python model: {packages}")
+    try:
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install"] + packages + ["-q"],
+            timeout=300,
+        )
+        logger.info(f"Packages installed successfully: {packages}")
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(
+            f"Failed to install packages {packages}. "
+            f"Error: {e}. Install them manually with: pip install {' '.join(packages)}"
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(
+            f"Timeout installing packages {packages}. "
+            "Check network connectivity or install them manually."
+        )
+
+
 class ClickZettaPythonJobHelper(PythonJobHelper):
     """
     Executes dbt Python models using ZettaPark.
@@ -125,6 +179,9 @@ class ClickZettaPythonJobHelper(PythonJobHelper):
     The user's model(dbt, session) function is called with a DbtZettaPark
     object and a ZettaPark Session. The returned DataFrame is written to
     the target relation.
+
+    Packages declared in dbt.config(packages=[...]) are installed automatically
+    before the model runs.
     """
 
     def __init__(self, parsed_model: Dict, credentials: Any):
@@ -144,6 +201,16 @@ class ClickZettaPythonJobHelper(PythonJobHelper):
                 f"Found functions: {[k for k in exec_globals if callable(exec_globals[k])]}"
             )
 
+        # Collect dbt.config() settings (including packages) via a dry-run
+        dbt_obj = DbtZettaPark(self._parsed_model, session)
+        _collect_config(exec_globals["model"], dbt_obj)
+
+        # Install packages declared in dbt.config(packages=[...])
+        packages = dbt_obj._config.get("packages", [])
+        if packages:
+            _install_packages_list(packages)
+
+        # Reset dbt_obj and run for real
         dbt_obj = DbtZettaPark(self._parsed_model, session)
         result_df = exec_globals["model"](dbt_obj, session)
 
