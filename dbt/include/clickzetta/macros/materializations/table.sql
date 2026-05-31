@@ -1,4 +1,4 @@
-{% materialization table, adapter = 'clickzetta', supported_languages=['sql'] %}
+{% materialization table, adapter = 'clickzetta', supported_languages=['sql', 'python'] %}
   {%- set language = model['language'] -%}
   {%- set identifier = model['alias'] -%}
 
@@ -34,6 +34,11 @@
   {%- if language == 'sql' and (has_partition or has_cluster) -%}
     {#-- Lakehouse CTAS does not support PARTITIONED BY / CLUSTERED BY. --#}
     {{ clickzetta__create_partitioned_table_as(target_relation, compiled_code) }}
+  {%- elif language == 'python' -%}
+    {#-- Python models: submit_python_job must be called from materialization level (call stack depth == 2) --#}
+    {%- call statement('main', language='python') -%}
+      {{ compiled_code }}
+    {%- endcall -%}
   {%- else -%}
     -- build model
     {%- call statement('main', language=language) -%}

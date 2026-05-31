@@ -743,6 +743,20 @@
 
 
 {#--
+  py_write_table: called by create_table_as when language='python'.
+  Must be called directly from a materialization macro (call stack depth == 2).
+  Delegates to submit_python_job via the statement macro.
+  Note: this macro must NOT add extra call stack depth — it must be inlined
+  into the materialization, not wrapped in another macro call.
+--#}
+{% macro py_write_table(compiled_code, target_relation) %}
+  {%- call statement('main', language='python') -%}
+    {{ compiled_code }}
+  {%- endcall -%}
+{% endmacro %}
+
+
+{#--
   ── Table Stream notes ────────────────────────────────────────────────────────
 
   ClickZetta Table Streams are NOT created by dbt materializations — they must

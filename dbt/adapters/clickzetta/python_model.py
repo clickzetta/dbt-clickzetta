@@ -37,11 +37,14 @@ class DbtZettaPark:
 
     def ref(self, *args):
         # args: (model_name,) or (package_name, model_name)
-        if len(args) == 1:
-            name = args[0]
-        else:
-            name = args[1]
-        # Resolve via the session's current schema context
+        name = args[-1]
+        # Build fully-qualified name using the model's database and schema
+        database = self._parsed_model.get("database", "")
+        schema = self._parsed_model.get("schema", "")
+        if database and schema:
+            return self._session.table(f"{database}.{schema}.{name}")
+        elif schema:
+            return self._session.table(f"{schema}.{name}")
         return self._session.table(name)
 
     def source(self, source_name: str, table_name: str):
