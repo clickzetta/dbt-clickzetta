@@ -7,10 +7,14 @@ See the **[examples/](./examples/)** directory for complete, runnable examples o
 ## Installation
 
 ```bash
+# SQL models only (default)
 pip install dbt-clickzetta
+
+# Python models (requires ZettaPark)
+pip install "dbt-clickzetta[python]"
 ```
 
-Requires Python 3.8+ and dbt-core 1.8+.
+Requires Python 3.10+ (3.12 recommended) and dbt-core 1.8+.
 
 > **Note on versions:** The legacy `dbt-clickzetta 0.2.x` series on PyPI requires dbt-core ~1.5 and is no longer maintained. Use `dbt-clickzetta >= 1.6` which supports dbt-core 1.8+ and includes full three-part naming (`workspace.schema.table`), incremental strategies, snapshots, and all modern dbt features.
 
@@ -65,7 +69,7 @@ dbt docs generate
 | `persist_docs` (relation + columns) | ✅ |
 | Partitioned tables | ✅ |
 | Clustered tables | ✅ |
-| Python models | ✅ |
+| Python models | ✅ requires `pip install "dbt-clickzetta[python]"` |
 | `on_schema_change` | ✅ (append_new_columns, sync_all_columns) |
 | `grants` | ✅ |
 | `clone` materialization | ✅ (zero-copy clone + Time Travel clone) |
