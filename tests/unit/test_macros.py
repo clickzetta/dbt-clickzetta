@@ -251,3 +251,51 @@ class TestClickZettaMacros(unittest.TestCase):
             "create dynamic table my_dynamic_table partitioned by (partition_1,partition_2) clustered by (cluster_3,"
             "cluster_4) into 2 buckets refresh interval 3 minutes as select 1",
         )
+
+    # ── replace_dynamic_table_as (full_refresh path) ──────────────────────────
+
+    def test_macros_replace_dynamic_table_as_minimal(self):
+        """full_refresh with no config → CREATE OR REPLACE DYNAMIC TABLE ... AS ..."""
+        template = self.__get_template("adapters.sql")
+        sql = self.__run_macro_dynamic_table(
+            template, "clickzetta__replace_dynamic_table_as", "my_dynamic_table", "select 1"
+        ).strip()
+        self.assertEqual(sql, "create or replace dynamic table my_dynamic_table as select 1")
+
+    def test_macros_replace_dynamic_table_as_refresh(self):
+        """full_refresh with refresh_interval + refresh_vc → correct REFRESH INTERVAL vcluster clause."""
+        template = self.__get_template("adapters.sql")
+        self.config["refresh_interval"] = "5 MINUTE"
+        self.config["refresh_vc"] = "default"
+        sql = self.__run_macro_dynamic_table(
+            template, "clickzetta__replace_dynamic_table_as", "my_dynamic_table", "select 1"
+        ).strip()
+        self.assertEqual(
+            sql,
+            "create or replace dynamic table my_dynamic_table refresh interval 5 MINUTE vcluster default as select 1"
+        )
+
+    def test_macros_replace_dynamic_table_as_with_partition(self):
+        """full_refresh preserves partition and refresh config."""
+        template = self.__get_template("adapters.sql")
+        self.config["partition_by"] = ["ds"]
+        self.config["refresh_interval"] = "10 MINUTE"
+        self.config["refresh_vc"] = "default"
+        sql = self.__run_macro_dynamic_table(
+            template, "clickzetta__replace_dynamic_table_as", "my_dynamic_table", "select 1"
+        ).strip()
+        self.assertEqual(
+            sql,
+            "create or replace dynamic table my_dynamic_table partitioned by (ds) "
+            "refresh interval 10 MINUTE vcluster default as select 1"
+        )
+
+    def test_macros_replace_dynamic_table_as_target_lag(self):
+        """full_refresh with target_lag config emits TARGET_LAG clause."""
+        template = self.__get_template("adapters.sql")
+        self.config["target_lag"] = "1 minute"
+        sql = self.__run_macro_dynamic_table(
+            template, "clickzetta__replace_dynamic_table_as", "my_dynamic_table", "select 1"
+        ).strip()
+        self.assertIn("TARGET_LAG '1 minute'", sql)
+        self.assertIn("create or replace dynamic table", sql)
