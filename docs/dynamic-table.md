@@ -29,6 +29,7 @@ After creation, dbt triggers an immediate refresh so the table is queryable righ
 | `refresh_interval` | ✅ | Refresh schedule, e.g. `'5 MINUTE'`, `'1 HOUR'`, `'30 MINUTE'` |
 | `refresh_vc` | ❌ | VCluster used for refresh jobs, e.g. `'default'`. Omit to use the session default |
 | `on_configuration_change` | ❌ | What to do when the model config changes (see below) |
+| `full_refresh_strategy` | ❌ | `replace` (default) or `recreate` — see Escape Hatch below |
 | `partition_by` | ❌ | Partition columns |
 | `clustered_by` + `buckets` | ❌ | Clustering columns and bucket count |
 
@@ -62,6 +63,29 @@ Controls what happens when you run `dbt run` and the dynamic table already exist
 | `fail` | Raises a compiler error — forces you to run `dbt run --full-refresh` explicitly |
 
 > **Note:** ClickZetta does not support `ALTER DYNAMIC TABLE` for refresh config changes. `apply` uses `CREATE OR REPLACE`, which triggers a full refresh of the table data.
+
+## Escape Hatch: full_refresh_strategy
+
+`CREATE OR REPLACE DYNAMIC TABLE` can fail at semantic analysis when the engine's incremental maintenance plan is rejected — even though the SQL itself is valid (e.g. models with OUTER/SEMI/ANTI joins). When this happens, use `full_refresh_strategy: recreate` to force a DROP + fresh CREATE instead.
+
+```sql
+{{ config(
+    materialized='dynamic_table',
+    refresh_interval='1 HOUR',
+    refresh_vc='default',
+    full_refresh_strategy='recreate'    # escape hatch for CZLH-42000
+) }}
+```
+
+| Value | Behavior |
+|---|---|
+| `replace` (default) | `CREATE OR REPLACE DYNAMIC TABLE` — preserves data and grants |
+| `recreate` | `DROP DYNAMIC TABLE` + `CREATE DYNAMIC TABLE` — works when OR REPLACE's incremental plan is rejected |
+
+`recreate` trade-offs:
+- **Loses grants** — dbt re-applies grants from config, but any manual grants are lost
+- **Downstream DTs rebuild** — any dynamic table that reads from this table will do a full refresh on its next scheduled run
+- Only use when `replace` fails with `CZLH-42000`
 
 ## Schema changes
 

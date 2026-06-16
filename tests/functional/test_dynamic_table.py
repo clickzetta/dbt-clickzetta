@@ -653,6 +653,72 @@ select id, name, amount from {{ ref('seed_base') }}
         """Second run with fail raises a compiler error."""
         results = run_dbt(["run"], expect_pass=False)
         assert results[0].status == "error"
+
+
+class TestDynamicTableFullRefreshStrategyRecreate:
+    """
+    full_refresh_strategy='recreate': DROP + CREATE instead of CREATE OR REPLACE.
+    Escape hatch for CZLH-42000 on models with OUTER/SEMI/ANTI joins.
+    """
+
+    @pytest.fixture(scope="class")
+    def seeds(self):
+        return {"seed_base.csv": seeds_base_csv}
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "dt_recreate.sql": """
+{{ config(
+    materialized='dynamic_table',
+    refresh_interval='5 MINUTE',
+    refresh_vc='default',
+    full_refresh_strategy='recreate'
+) }}
+select id, name, amount from {{ ref('seed_base') }}
+""",
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"name": "dt_recreate_strategy_test"}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def clean_up(self, project):
+        yield
+        with project.adapter.connection_named("__test"):
+            relation = project.adapter.Relation.create(
+                database=project.database, schema=project.test_schema
+            )
+            project.adapter.drop_schema(relation)
+
+    def test_recreate_first_run_creates(self, project):
+        """First run: normal CREATE (no existing table, no DROP needed)."""
+        run_dbt(["seed"])
+        results = run_dbt(["run"])
+        assert results[0].status == "success"
+
+        relation = relation_from_name(project.adapter, "dt_recreate")
+        n = project.run_sql(f"select count(*) from {relation}", fetch="one")[0]
+        assert n == 3
+
+    def test_recreate_full_refresh_keeps_data(self, project):
+        """full-refresh with recreate: DROP + fresh CREATE, data intact."""
+        results = run_dbt(["run", "--full-refresh"])
+        assert results[0].status == "success"
+
+        relation = relation_from_name(project.adapter, "dt_recreate")
+        n = project.run_sql(f"select count(*) from {relation}", fetch="one")[0]
+        assert n == 3, f"expected 3 rows after DROP+CREATE, got {n}"
+
+    def test_recreate_twice(self, project):
+        """Full-refresh twice with recreate: idempotent."""
+        run_dbt(["run", "--full-refresh"])
+        results = run_dbt(["run", "--full-refresh"])
+        assert results[0].status == "success"
+
+
+class TestMaterializedView:
     @pytest.fixture(scope="class")
     def seeds(self):
         return {"seed_base.csv": seeds_base_csv}
