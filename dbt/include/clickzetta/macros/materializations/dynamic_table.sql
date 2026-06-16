@@ -65,9 +65,10 @@
     {% elif full_refresh_mode or not existing_relation.is_dynamic_table %}
         {% set build_sql = clickzetta__replace_dynamic_table_as(target_relation, sql) %}
     {% elif on_config_change == 'apply' %}
-        {#-- ClickZetta does not support ALTER DYNAMIC TABLE for refresh config changes.
-             CREATE OR REPLACE atomically updates refresh_interval, refresh_vc, and SQL. --#}
-        {% set build_sql = clickzetta__replace_dynamic_table_as(target_relation, sql) %}
+        {#-- ALTER DYNAMIC TABLE updates refresh_interval/refresh_vc without
+             resetting the refresh baseline or triggering a full refresh.
+             SQL changes still require --full-refresh or full_refresh_strategy. --#}
+        {% set build_sql = clickzetta__alter_dynamic_table(target_relation) %}
     {% elif on_config_change == 'fail' %}
         {{ exceptions.raise_compiler_error(
             "Dynamic table '" ~ target_relation ~ "' already exists. "
@@ -96,6 +97,7 @@
 {% macro dynamic_table_execute_build_sql(build_sql, existing_relation, target_relation) %}
 
     {%- set refresh_strategy = config.get('full_refresh_strategy', 'replace') | lower -%}
+    {%- set is_alter = build_sql | trim | lower | truncate(5, false, '') == 'alter' -%}
 
     {#--
       recreate strategy: DROP + CREATE instead of CREATE OR REPLACE.
@@ -114,12 +116,14 @@
 
     {#--
       After CREATE or REPLACE, trigger an immediate refresh so the table is
-      queryable right away (equivalent to Snowflake's initialize=ON_CREATE).
-      Without this, the table is empty until the first scheduled refresh fires.
+      queryable right away. ALTER does not need a refresh — it only changes
+      scheduling config without affecting the table data.
     --#}
+    {%- if not is_alter -%}
     {% call statement('initialize_refresh') %}
         refresh dynamic table {{ target_relation }}
     {% endcall %}
+    {%- endif %}
 
     {%- set grant_config = config.get('grants') -%}
     {%- set should_revoke = should_revoke(existing_relation, full_refresh_mode=True) if refresh_strategy != 'recreate' else false -%}

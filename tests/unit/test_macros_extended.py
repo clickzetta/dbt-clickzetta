@@ -308,12 +308,8 @@ class TestCreateIndexesMacro(MacroTestBase):
         self.assertEqual(sqls, [])
 
 
-class TestAlterDynamicTableMacro(MacroTestBase):
-    """
-    clickzetta__alter_dynamic_table was removed — ClickZetta does not support
-    ALTER DYNAMIC TABLE for refresh config changes. on_configuration_change='apply'
-    uses CREATE OR REPLACE instead. These tests verify replace_dynamic_table_as.
-    """
+class TestReplaceDynamicTableAsMacro(MacroTestBase):
+    """CREATE OR REPLACE DYNAMIC TABLE — used by full_refresh and recreate strategy."""
 
     def _run_replace(self, refresh_interval=None, refresh_vc=None):
         if refresh_interval is not None:
@@ -344,6 +340,40 @@ class TestAlterDynamicTableMacro(MacroTestBase):
 
     def test_replace_relation_name_included(self):
         sql = self._run_replace(refresh_interval="1 MINUTE")
+        self.assertIn("ws.s.t", sql)
+
+
+class TestAlterDynamicTableMacro(MacroTestBase):
+    """
+    clickzetta__alter_dynamic_table: ALTER DYNAMIC TABLE to update refresh config.
+    Syntax: ALTER DYNAMIC TABLE <dt> REFRESH INTERVAL <n> <unit> [VCLUSTER <vc>]
+    Does NOT reset refresh baseline or trigger full refresh.
+    """
+
+    def _run_alter(self, refresh_interval=None, refresh_vc=None):
+        if refresh_interval is not None:
+            self.config["refresh_interval"] = refresh_interval
+        if refresh_vc is not None:
+            self.config["refresh_vc"] = refresh_vc
+        template = self._get_template("adapters.sql")
+        rel = self._make_relation("dynamic_table")
+        result = template.module.clickzetta__alter_dynamic_table(rel)
+        return _norm(result) if result else ""
+
+    def test_alter_with_interval_only(self):
+        sql = self._run_alter(refresh_interval="5 MINUTE")
+        self.assertIn("alter dynamic table", sql)
+        self.assertIn("refresh interval 5 minute", sql)
+        self.assertNotIn("vcluster", sql)
+
+    def test_alter_with_interval_and_vc(self):
+        sql = self._run_alter(refresh_interval="10 MINUTE", refresh_vc="default")
+        self.assertIn("alter dynamic table", sql)
+        self.assertIn("refresh interval 10 minute", sql)
+        self.assertIn("vcluster default", sql)
+
+    def test_alter_relation_name_included(self):
+        sql = self._run_alter(refresh_interval="1 MINUTE")
         self.assertIn("ws.s.t", sql)
 
 

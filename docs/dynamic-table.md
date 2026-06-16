@@ -59,10 +59,10 @@ Controls what happens when you run `dbt run` and the dynamic table already exist
 | Value | Behavior |
 |---|---|
 | `continue` (default) | No-op — the existing table keeps refreshing on its current schedule |
-| `apply` | Recreates the table with `CREATE OR REPLACE DYNAMIC TABLE` to apply config or SQL changes |
+| `apply` | Issues `ALTER DYNAMIC TABLE` to update refresh_interval/refresh_vc — does **not** trigger a full refresh or reset the refresh baseline |
 | `fail` | Raises a compiler error — forces you to run `dbt run --full-refresh` explicitly |
 
-> **Note:** ClickZetta does not support `ALTER DYNAMIC TABLE` for refresh config changes. `apply` uses `CREATE OR REPLACE`, which triggers a full refresh of the table data.
+> **Note:** `apply` only updates scheduling config (refresh interval, vcluster). To change SQL logic (WHERE, JOIN, expressions), add/remove columns, use `dbt run --full-refresh`.
 
 ## Escape Hatch: full_refresh_strategy
 

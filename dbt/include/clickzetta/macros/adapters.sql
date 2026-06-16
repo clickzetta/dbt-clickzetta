@@ -557,6 +557,20 @@
     {{ sql }}
 {% endmacro %}
 
+{#--
+  ALTER DYNAMIC TABLE to update refresh_interval and/or refresh_vc.
+  Does NOT reset the refresh baseline or trigger a full refresh.
+  Called when on_configuration_change='apply'.
+
+  Syntax: ALTER DYNAMIC TABLE <dt> REFRESH INTERVAL <n> <unit> [VCLUSTER <vc>]
+--#}
+{% macro clickzetta__alter_dynamic_table(relation) %}
+  {% set refresh_interval_val = config.get('refresh_interval') %}
+  {% set refresh_vc_val = config.get('refresh_vc') %}
+  alter dynamic table {{ relation }} refresh interval {{ refresh_interval_val }}
+  {%- if refresh_vc_val is not none %} vcluster {{ refresh_vc_val }}{% endif %}
+{% endmacro %}
+
 {% macro alter_table_add_constraints(relation, constraints) %}
   {{ return(adapter.dispatch('alter_table_add_constraints', 'dbt')(relation, constraints)) }}
 {% endmacro %}
